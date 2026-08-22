@@ -8,7 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
 import database as db
-from config import ADMIN_IDS, COURSES
+from config import ADMIN_IDS, BOSS_IDS, COURSES, is_admin
 from states import SpecialTaskAdmin
 from keyboards import NAV_BUTTON_TEXTS
 
@@ -18,10 +18,6 @@ router.message.filter(F.chat.type == "private")
 log = logging.getLogger("special_task")
 
 SUBMISSION_WINDOW_SECONDS = 60
-
-
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
 
 
 # telegram_id -> {"task_name": str, "files": list[dict], "timer": asyncio.Task}
@@ -62,7 +58,7 @@ async def _flush_submission(bot, telegram_id: int) -> int:
         f"📎 {len(files)} ta fayl"
     )
 
-    for admin_id in ADMIN_IDS:
+    for admin_id in ADMIN_IDS + BOSS_IDS:
         try:
             await bot.send_message(admin_id, caption, parse_mode="HTML")
             for f in files:

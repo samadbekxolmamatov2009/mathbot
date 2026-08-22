@@ -133,6 +133,34 @@ async def init_db():
                 last_sent_week TEXT
             )
         """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS admins (
+                telegram_id INTEGER PRIMARY KEY,
+                added_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS score_adjustments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER NOT NULL,
+                delta INTEGER NOT NULL,
+                reason TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+
+        # Birinchi ishga tushishda config.py'dagi statik ADMIN_IDS bilan
+        # "admins" jadvalini boshlang'ich holatga keltiradi (keyinchalik
+        # adminlar shu jadval orqali dinamik boshqariladi).
+        async with db.execute("SELECT COUNT(*) FROM admins") as cursor:
+            admins_count = (await cursor.fetchone())[0]
+        if admins_count == 0:
+            from config import ADMIN_IDS as INITIAL_ADMIN_IDS
+            for admin_id in INITIAL_ADMIN_IDS:
+                await db.execute(
+                    "INSERT OR IGNORE INTO admins (telegram_id) VALUES (?)", (admin_id,)
+                )
+
         await db.commit()
 
 
@@ -148,6 +176,50 @@ async def get_user(telegram_id: int):
 async def is_user_registered(telegram_id: int) -> bool:
     user = await get_user(telegram_id)
     return bool(user and user["is_registered"])
+
+
+# ---------- Adminlar (dinamik boshqariladigan) ----------
+
+async def get_admin_ids() -> list[int]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("SELECT telegram_id FROM admins")
+        rows = await cursor.fetchall()
+        return [row[0] for row in rows]
+
+
+async def add_admin(telegram_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT OR IGNORE INTO admins (telegram_id) VALUES (?)", (telegram_id,)
+        )
+        await db.commit()
+
+
+async def remove_admin(telegram_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute("DELETE FROM admins WHERE telegram_id = ?", (telegram_id,))
+        await db.commit()
+        return cursor.rowcount > 0
+
+
+# ---------- Ball tuzatishlari ----------
+
+async def adjust_user_score(telegram_id: int, delta: int, reason: str | None = None):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO score_adjustments (telegram_id, delta, reason) VALUES (?, ?, ?)",
+            (telegram_id, delta, reason),
+        )
+        await db.commit()
+
+
+async def get_score_adjustment_total(telegram_id: int) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            "SELECT COALESCE(SUM(delta), 0) FROM score_adjustments WHERE telegram_id = ?",
+            (telegram_id,),
+        )
+        return (await cursor.fetchone())[0]
 
 
 async def start_registration(telegram_id: int):
@@ -771,6 +843,12 @@ async def get_user_coins(telegram_id: int) -> dict:
         ) as cursor:
             test_coins = (await cursor.fetchone())[0]
 
+        async with db.execute(
+            "SELECT COALESCE(SUM(delta), 0) FROM score_adjustments WHERE telegram_id = ?",
+            (telegram_id,),
+        ) as cursor:
+            adjustment_coins = (await cursor.fetchone())[0]
+
     attendance_coins = attendance_count
     test_streak_coins = _streak_bonus([tid in submitted_test_ids for tid in test_ids])
 
@@ -779,7 +857,8 @@ async def get_user_coins(telegram_id: int) -> dict:
         "attendance_coins": attendance_coins,
         "test_coins": test_coins,
         "test_streak_coins": test_streak_coins,
-        "total": attendance_coins + test_coins + test_streak_coins,
+        "adjustment_coins": adjustment_coins,
+        "total": attendance_coins + test_coins + test_streak_coins + adjustment_coins,
     }
 
 
@@ -811,12 +890,17 @@ async def get_leaderboard(limit: int = 50):
         ) as cursor:
             test_scores = {row["telegram_id"]: row["total_score"] for row in await cursor.fetchall()}
 
+        async with db.execute(
+            "SELECT telegram_id, SUM(delta) AS total_delta FROM score_adjustments GROUP BY telegram_id"
+        ) as cursor:
+            adjustments = {row["telegram_id"]: row["total_delta"] for row in await cursor.fetchall()}
+
     leaderboard = []
     for u in users:
         tid = u["telegram_id"]
         attendance_coins = attendance_counts.get(tid, 0)
         test_streak_coins = _streak_bonus([(test_id, tid) in submitted_set for test_id in test_ids])
-        coins = attendance_coins + test_scores.get(tid, 0) + test_streak_coins
+        coins = attendance_coins + test_scores.get(tid, 0) + test_streak_coins + adjustments.get(tid, 0)
         leaderboard.append({"telegram_id": tid, "full_name": u["full_name"], "coins": coins})
 
     leaderboard.sort(key=lambda r: (-r["coins"], r["full_name"] or ""))

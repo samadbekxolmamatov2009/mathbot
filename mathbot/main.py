@@ -9,8 +9,10 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import FSInputFile
 from aiohttp import web
 
+import config
 from config import (
     ADMIN_IDS,
+    BOSS_IDS,
     BOT_TOKEN,
     REPORT_CHANNEL,
     REPORT_INTERVAL_SECONDS,
@@ -19,7 +21,7 @@ from config import (
 )
 import database as db
 from database import init_db
-from handlers import registration, admin, menu, attendance, tests, aplus, special_task
+from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
 from pdf_report import generate_weekly_report, generate_test_results_report
 from quiz_structure import DEFAULT_TOTAL_QUESTIONS
 from webapp.server import create_app
@@ -56,7 +58,7 @@ async def send_test_results_loop(bot: Bot):
                     test["total_questions"] or DEFAULT_TOTAL_QUESTIONS,
                     rows,
                 )
-                for admin_id in ADMIN_IDS:
+                for admin_id in ADMIN_IDS + BOSS_IDS:
                     try:
                         await bot.send_document(admin_id, FSInputFile(path))
                     except Exception:
@@ -79,7 +81,7 @@ async def send_aplus_results_loop(bot: Bot):
                 generate_test_results_report(
                     path, test["code"], test["name"], test["question_count"] * 2, rows
                 )
-                for admin_id in ADMIN_IDS:
+                for admin_id in ADMIN_IDS + BOSS_IDS:
                     try:
                         await bot.send_document(admin_id, FSInputFile(path))
                     except Exception:
@@ -131,14 +133,21 @@ async def main():
 
     await init_db()
 
+    # "admins" jadvali - ADMIN_IDS ro'yxatining o'zagida, shuning uchun
+    # boshqa modullardagi "from config import ADMIN_IDS" ham darhol yangi
+    # holatni ko'rishi uchun ro'yxat joyida (in-place) yangilanadi.
+    config.ADMIN_IDS[:] = await db.get_admin_ids()
+
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
     await admin.set_admin_menu(bot)
+    await admin.set_boss_menu(bot)
 
     # special_task hammasidan oldin turishi shart: u SkipHandler orqali
     # to'plangan fayllarni yuborib, xabarni keyingi routerlarga o'tkazib yuboradi.
     dp.include_router(special_task.router)
+    dp.include_router(boss.router)
     # Admin handlerlari registration'dan oldin bo'lishi kerak
     # (chunki /start admin uchun boshqacha ishlaydi)
     dp.include_router(admin.router)

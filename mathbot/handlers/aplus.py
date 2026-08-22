@@ -12,7 +12,7 @@ from aiogram.types import (
 )
 
 import database as db
-from config import ADMIN_IDS, WEBAPP_URL, TEST_WEBAPP_URL
+from config import WEBAPP_URL, TEST_WEBAPP_URL, is_admin
 from states import APlusCode
 from keyboards import NAV_BUTTON_TEXTS
 
@@ -22,10 +22,6 @@ router.callback_query.filter(F.message.chat.type == "private")
 
 WEBAPP_BASE = WEBAPP_URL.rstrip("/")
 TEST_WEBAPP_BASE = TEST_WEBAPP_URL.rstrip("/")
-
-
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
 
 
 # ---------- Admin: A+ testini Mini App orqali yaratish ----------

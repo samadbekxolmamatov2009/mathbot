@@ -19,7 +19,7 @@ from aiohttp import web
 
 import database as db
 from answer_check import answers_equivalent
-from config import ADMIN_IDS, ALLOWED_ORIGINS, BOT_TOKEN
+from config import ALLOWED_ORIGINS, BOT_TOKEN, is_admin
 from quiz_structure import all_questions, options_for, DEFAULT_TOTAL_QUESTIONS
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -113,7 +113,7 @@ async def create_test_handler(request: web.Request):
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
 
-    if user["id"] not in ADMIN_IDS:
+    if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
     name = (body.get("name") or "").strip()
@@ -165,7 +165,7 @@ async def get_test_edit_data_handler(request: web.Request):
     user = verify_init_data(request.query.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-    if user["id"] not in ADMIN_IDS:
+    if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
     test = await db.get_test_by_id(test_id)
@@ -198,7 +198,7 @@ async def update_test_handler(request: web.Request):
     user = verify_init_data(body.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-    if user["id"] not in ADMIN_IDS:
+    if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
     test = await db.get_test_by_id(test_id)
@@ -397,7 +397,7 @@ async def get_broadcast_schedule_handler(request: web.Request):
     user = verify_init_data(request.query.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-    if user["id"] not in ADMIN_IDS:
+    if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
     schedule = await db.get_broadcast_schedule()
@@ -425,7 +425,7 @@ async def save_broadcast_schedule_handler(request: web.Request):
     user = verify_init_data(body.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-    if user["id"] not in ADMIN_IDS:
+    if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
     message = (body.get("message") or "").strip()
@@ -482,7 +482,7 @@ async def aplus_create_test_handler(request: web.Request):
     user = verify_init_data(body.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-    if user["id"] not in ADMIN_IDS:
+    if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
     name = (body.get("name") or "").strip()
@@ -531,7 +531,7 @@ async def aplus_get_edit_data_handler(request: web.Request):
     user = verify_init_data(request.query.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-    if user["id"] not in ADMIN_IDS:
+    if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
     test = await db.get_aplus_test_by_id(test_id)
@@ -564,7 +564,7 @@ async def aplus_update_test_handler(request: web.Request):
     user = verify_init_data(body.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-    if user["id"] not in ADMIN_IDS:
+    if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
     test = await db.get_aplus_test_by_id(test_id)

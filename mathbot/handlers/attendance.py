@@ -15,7 +15,7 @@ from aiogram.types import (
 )
 
 import database as db
-from config import ADMIN_IDS, COURSES
+from config import ADMIN_IDS, BOSS_IDS, COURSES, is_admin
 from states import Attendance, AttendanceCode
 from pdf_report import generate_attendance_report, generate_attendance_matrix_report
 from keyboards import NAV_BUTTON_TEXTS
@@ -32,10 +32,6 @@ class HasPendingAbsenceReason(BaseFilter):
     async def __call__(self, message: Message) -> bool:
         pending = await db.get_pending_absence_reason(message.from_user.id)
         return pending is not None
-
-
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
 
 
 @router.message(F.text == "📅 Davomat")
@@ -238,7 +234,7 @@ async def _run_attendance_session(bot, session_id: int, warning_minutes: int, re
     report_path = os.path.join(tempfile.gettempdir(), f"davomat_{session_id}.pdf")
     generate_attendance_report(report_path, rows)
 
-    for admin_id in ADMIN_IDS:
+    for admin_id in ADMIN_IDS + BOSS_IDS:
         try:
             await bot.send_document(admin_id, FSInputFile(report_path))
         except Exception:
@@ -301,7 +297,7 @@ async def process_absence_reason(message: Message, bot):
     name = (user["full_name"] if user else None) or "Noma'lum"
     course = COURSES.get(user["course"], {}).get("name", user["course"]) if user else "Noma'lum"
 
-    for admin_id in ADMIN_IDS:
+    for admin_id in ADMIN_IDS + BOSS_IDS:
         try:
             await bot.send_message(
                 admin_id,

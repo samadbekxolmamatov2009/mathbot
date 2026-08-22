@@ -22,6 +22,12 @@ ADMIN_MENU_TEXTS = {
     "ℹ️ Yordam",
 }
 
+BOSS_MENU_TEXTS = {
+    "➕ Admin qo'shish",
+    "➖ Adminni olib tashlash",
+    "⚖️ Ball o'zgartirish",
+}
+
 MAIN_MENU_TEXTS = {
     "📝 Test yuborish",
     "➕ A+ ishlash",
@@ -33,7 +39,7 @@ MAIN_MENU_TEXTS = {
     "📩 Adminga xabar",
 }
 
-NAV_BUTTON_TEXTS = ADMIN_MENU_TEXTS | MAIN_MENU_TEXTS
+NAV_BUTTON_TEXTS = ADMIN_MENU_TEXTS | MAIN_MENU_TEXTS | BOSS_MENU_TEXTS
 
 
 def role_keyboard() -> InlineKeyboardMarkup:
@@ -125,6 +131,25 @@ def admin_menu_keyboard():
             ],
             [
                 KeyboardButton(text="⚙️ Sozlamalar"),
+            ],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def boss_menu_keyboard():
+    """Faqat Boss'ning shaxsiy chatida ko'rsatiladigan menyu - admin tugmalari
+    + Boss'ga xos qo'shimcha tugmalar (boshqa hech kim buni ko'rmaydi)."""
+    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    base = admin_menu_keyboard()
+    return ReplyKeyboardMarkup(
+        keyboard=base.keyboard + [
+            [
+                KeyboardButton(text="➕ Admin qo'shish"),
+                KeyboardButton(text="➖ Adminni olib tashlash"),
+            ],
+            [
+                KeyboardButton(text="⚖️ Ball o'zgartirish"),
             ],
         ],
         resize_keyboard=True,

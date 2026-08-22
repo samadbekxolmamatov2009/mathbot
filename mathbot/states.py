@@ -50,3 +50,11 @@ class Broadcast(StatesGroup):
 class SpecialTaskAdmin(StatesGroup):
     """Admin yangi maxsus topshiriq nomini kiritayotganda ishlatiladigan holat"""
     waiting_name = State()
+
+
+class Boss(StatesGroup):
+    """Boss admin qo'shish/o'chirish va o'quvchi ballini o'zgartirishda ishlatiladigan holatlar"""
+    waiting_add_admin_id = State()
+    waiting_score_id = State()
+    waiting_score_delta = State()
+    waiting_score_reason = State()

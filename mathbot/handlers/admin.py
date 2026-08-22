@@ -15,9 +15,10 @@ from aiogram.types import (
 )
 
 import database as db
-from config import ADMIN_IDS, COURSES, WEBAPP_URL
+from config import ADMIN_IDS, BOSS_IDS, COURSES, WEBAPP_URL, is_admin
 from states import Broadcast
 from keyboards import admin_menu_keyboard, NAV_BUTTON_TEXTS
+from handlers.boss import notify_boss
 
 WEBAPP_BASE = WEBAPP_URL.rstrip("/")
 
@@ -26,24 +27,56 @@ router.message.filter(F.chat.type == "private")
 router.callback_query.filter(F.message.chat.type == "private")
 
 
-def is_admin(user_id: int) -> bool:
-    return user_id in ADMIN_IDS
+ADMIN_COMMANDS = [
+    BotCommand(command="stats", description="📊 Statistika"),
+    BotCommand(command="users", description="👥 Foydalanuvchilar ro'yxati"),
+    BotCommand(command="delete", description="🗑 Foydalanuvchini o'chirish"),
+    BotCommand(command="admins", description="👮 Adminlar ro'yxati"),
+    BotCommand(command="help", description="ℹ️ Yordam"),
+]
+
+
+# Boss uchun buyruqlar - bu ro'yxat FAQAT BOSS_IDS'ning shaxsiy chatiga
+# (BotCommandScopeChat) o'rnatiladi, shuning uchun boshqa hech kim - hatto
+# oddiy adminlar ham - buni ko'ra olmaydi (Telegram bot menyusi har bir
+# chat uchun alohida, boshqalarga umuman ko'rinmaydi).
+BOSS_COMMANDS = ADMIN_COMMANDS + [
+    BotCommand(command="boss_add", description="➕ Admin qo'shish"),
+    BotCommand(command="boss_remove", description="➖ Adminni olib tashlash"),
+    BotCommand(command="boss_score", description="⚖️ O'quvchi ballini o'zgartirish"),
+]
 
 
 async def set_admin_menu(bot):
     """Chap tomondagi ko'k 'Menu' tugmasini faqat adminlar uchun sozlaydi"""
-    commands = [
-        BotCommand(command="stats", description="📊 Statistika"),
-        BotCommand(command="users", description="👥 Foydalanuvchilar ro'yxati"),
-        BotCommand(command="delete", description="🗑 Foydalanuvchini o'chirish"),
-        BotCommand(command="admins", description="👮 Adminlar ro'yxati"),
-        BotCommand(command="help", description="ℹ️ Yordam"),
-    ]
     for admin_id in ADMIN_IDS:
         try:
-            await bot.set_my_commands(commands, scope=BotCommandScopeChat(chat_id=admin_id))
+            await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
         except Exception:
             pass
+
+
+async def set_boss_menu(bot):
+    """Boss'lar uchun shaxsiy menyuni (admin buyruqlari + boss buyruqlari) sozlaydi."""
+    for boss_id in BOSS_IDS:
+        try:
+            await bot.set_my_commands(BOSS_COMMANDS, scope=BotCommandScopeChat(chat_id=boss_id))
+        except Exception:
+            pass
+
+
+async def set_admin_menu_for(bot, admin_id: int):
+    try:
+        await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
+    except Exception:
+        pass
+
+
+async def clear_admin_menu_for(bot, admin_id: int):
+    try:
+        await bot.delete_my_commands(scope=BotCommandScopeChat(chat_id=admin_id))
+    except Exception:
+        pass
 
 
 @router.message(Command("help"))
@@ -306,6 +339,12 @@ async def confirm_broadcast(callback: CallbackQuery, state: FSMContext, bot):
             failed += 1
 
     await callback.message.edit_text(f"✅ Yuborildi: {sent} ta\n❌ Yetib bormadi: {failed} ta")
+    await notify_boss(
+        bot,
+        f"📢 Admin xabar yubordi.\nYuboruvchi ID: <code>{callback.from_user.id}</code>\n"
+        f"✅ {sent} ta yetdi, ❌ {failed} ta yetmadi.",
+        exclude=callback.from_user.id,
+    )
 
 
 @router.callback_query(F.data == "broadcast_cancel")

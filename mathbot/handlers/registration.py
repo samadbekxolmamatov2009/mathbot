@@ -12,7 +12,7 @@ from aiogram.types import (
 
 import database as db
 from states import Registration
-from config import ADMIN_IDS, COURSES
+from config import COURSES, is_admin, is_boss
 from keyboards import (
     role_keyboard,
     courses_keyboard,
@@ -21,6 +21,7 @@ from keyboards import (
     phone_request_keyboard,
     main_menu_keyboard,
     admin_menu_keyboard,
+    boss_menu_keyboard,
 )
 
 router = Router()
@@ -44,7 +45,15 @@ def progress(step: int, total: int = 7) -> str:
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext):
-    if message.from_user.id in ADMIN_IDS:
+    if is_boss(message.from_user.id):
+        await message.answer(
+            "Assalomu alaykum, Boss! \U0001F451\n\n"
+            "Quyidagi menyudan foydalaning \U0001F447",
+            reply_markup=boss_menu_keyboard(),
+        )
+        return
+
+    if is_admin(message.from_user.id):
         await message.answer(
             "Assalomu alaykum, Admin! \U0001F44B\n\n"
             "Quyidagi menyudan foydalaning \U0001F447",
