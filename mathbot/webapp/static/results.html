@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Natijalarim</title>
+<link rel="stylesheet" href="/style.css" />
+<link rel="stylesheet" href="/results.css" />
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="header">
+    <h1>📊 Natijalarim</h1>
+    <p>Test, davomat va doimiy ishtirok ballaringiz</p>
+  </div>
+
+  <div class="chart-loading" id="loadingState">
+    <div class="spinner"></div>
+  </div>
+
+  <div class="total-card" id="totalCard" hidden>
+    <div class="total-label">💰 Jami ball</div>
+    <div class="total-value" id="totalValue">—</div>
+  </div>
+
+  <section class="results-section" id="testSection" hidden>
+    <h2>📝 Test natijalari</h2>
+
+    <div class="stats-row" id="statsRow">
+      <div class="stat-tile">
+        <div class="stat-label">Jami testlar</div>
+        <div class="stat-value" id="statTotal">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">O'rtacha natija</div>
+        <div class="stat-value" id="statAvg">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">So'nggi o'zgarish</div>
+        <div class="stat-value" id="statDelta">—</div>
+      </div>
+    </div>
+
+    <div class="chart-scroll" id="chartScroll" hidden>
+      <div class="bars" id="bars"></div>
+    </div>
+    <p class="chart-hint" id="chartHint" hidden>So'nggi test ajratib ko'rsatilgan. Batafsil uchun ustunga bosing.</p>
+    <p class="section-empty" id="testEmpty" hidden>Hozircha birorta test yechmagansiz.</p>
+  </section>
+
+  <section class="results-section" id="streakSection" hidden>
+    <h2>🔥 Doimiy ishtirok</h2>
+    <div class="mini-stat-card">
+      <div class="mini-stat-value" id="streakValue">0</div>
+      <div class="mini-stat-caption">Testlarni ketma-ket (o'tkazib yubormay) ishlash balli — bitta testni ishlamasangiz, keyingisida yana 1 balldan boshlanadi.</div>
+    </div>
+  </section>
+
+  <section class="results-section" id="attendanceSection" hidden>
+    <h2>📅 Davomat</h2>
+    <div class="mini-stat-card">
+      <div class="mini-stat-row">
+        <span id="attendanceCount">0 marta ishtirok</span>
+        <span class="mini-stat-value" id="attendanceValue">0 ball</span>
+      </div>
+      <div class="mini-stat-caption">Har bir qatnashgan davomat uchun 1 ball beriladi.</div>
+    </div>
+  </section>
+
+  <div class="empty-state" id="emptyState" hidden>Hozircha hech qanday faoliyatingiz yo'q.</div>
+
+  <script src="/results.js?v=2"></script>
+</body>
+</html>

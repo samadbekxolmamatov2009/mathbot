@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Test</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <h1>Test</h1>
+      <p class="progress-label" id="testNameLabel" hidden></p>
+      <div class="progress-track" id="progressTrack" hidden>
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+      <p class="progress-label" id="progressLabel" hidden></p>
+    </div>
+  </div>
+
+  <main id="app">
+    <div class="state state-center" id="loadingState">
+      <div class="spinner"></div>
+      <p id="loadingText">Yuklanmoqda...</p>
+    </div>
+
+    <div class="state state-center" id="infoState" hidden>
+      <div class="info-icon" id="infoIcon">ℹ️</div>
+      <p id="infoText"></p>
+    </div>
+
+    <div class="question-list" id="questionList" hidden></div>
+
+    <section class="result" id="resultState" hidden>
+      <div class="result-card">
+        <div class="score-ring" id="scoreRing">
+          <div class="score-ring-inner">
+            <span class="score-value" id="scoreValue"></span>
+            <span class="score-total" id="scoreTotal"></span>
+          </div>
+        </div>
+        <p class="result-caption">Sizning natijangiz</p>
+      </div>
+      <div class="result-list" id="resultList"></div>
+    </section>
+  </main>
+
+  <div class="submit-bar" id="submitBar" hidden>
+    <button type="button" class="submit-btn" id="submitBtn">Yakunlash</button>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

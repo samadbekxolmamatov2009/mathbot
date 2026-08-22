@@ -1,0 +1,17 @@
+[Unit]
+Description=Mathbot Telegram bot + Mini App backend
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/mathbot
+Environment=BOT_TOKEN=CHANGE_ME
+Environment=WEBAPP_URL=https://CHANGE_ME.sslip.io
+Environment=TEST_WEBAPP_URL=https://CHANGE_ME.netlify.app
+ExecStart=/home/ubuntu/mathbot/.venv/bin/python main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,444 @@
+:root {
+  --bg: var(--tg-theme-bg-color, #eef3f9);
+  --secondary-bg: var(--tg-theme-secondary-bg-color, #f5f8fc);
+  --card-bg: var(--tg-theme-section-bg-color, #ffffff);
+  --text: var(--tg-theme-text-color, #1c2b3a);
+  --hint: var(--tg-theme-hint-color, #7c8b9b);
+  --accent: var(--tg-theme-button-color, #3d6ea5);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --border: rgba(60, 90, 120, 0.12);
+  --correct: #2fa360;
+  --wrong: #e0503b;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* .state-center/.question-list/.result barchasi display:flex belgilaydi,
+   xuddi shu specificity darajasida - shu sabab UA stylesheet'dagi
+   `[hidden]{display:none}` qoidasidan keyin kelib uni bekor qilib qo'yadi.
+   Natijada .hidden = true qilingan elementlar ko'rinishda qolib ketadi. */
+[hidden] {
+  display: none !important;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overscroll-behavior-y: none;
+  padding-bottom: calc(96px + var(--safe-bottom));
+}
+
+button {
+  font-family: inherit;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
+  padding-top: var(--safe-top);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-inner {
+  padding: 10px 18px 12px;
+}
+
+.topbar h1 {
+  margin: 4px 0 10px;
+  font-size: 19px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
+.progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--secondary-bg);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.progress-label {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--hint);
+  text-align: center;
+}
+
+#app {
+  padding: 14px 14px 4px;
+}
+
+.state-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 60vh;
+  text-align: center;
+  padding: 24px;
+  color: var(--hint);
+  font-size: 14.5px;
+}
+
+.info-icon {
+  font-size: 34px;
+}
+
+.spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.question-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.question-card.answered {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.q-number {
+  min-width: 24px;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--hint);
+  text-align: center;
+}
+
+.options {
+  display: flex;
+  gap: 6px;
+  flex: 1;
+  justify-content: flex-end;
+}
+
+.option-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.option-btn:active {
+  transform: scale(0.9);
+}
+
+.option-btn.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  transform: scale(1.06);
+}
+
+.submit-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 14px calc(10px + var(--safe-bottom));
+  background: linear-gradient(to top, var(--bg) 60%, transparent);
+}
+
+.submit-btn {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  padding: 14px;
+  font-size: 15.5px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--accent-text);
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+.submit-btn:active {
+  transform: scale(0.98);
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.result-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 0 6px;
+}
+
+.score-ring {
+  width: 128px;
+  height: 128px;
+  border-radius: 50%;
+  background: conic-gradient(var(--accent) calc(var(--pct, 0) * 1%), var(--secondary-bg) 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-ring-inner {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  background: var(--card-bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.score-value {
+  font-size: 28px;
+  font-weight: 800;
+}
+
+.score-total {
+  font-size: 12px;
+  color: var(--hint);
+}
+
+.result-caption {
+  margin: 0;
+  font-size: 13px;
+  color: var(--hint);
+}
+
+.result-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.result-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 12.5px;
+  gap: 8px;
+}
+
+.result-row.correct {
+  border-left: 4px solid var(--correct);
+}
+
+.result-row.wrong {
+  border-left: 4px solid var(--wrong);
+}
+
+.result-status {
+  font-weight: 700;
+}
+
+.result-status.correct {
+  color: var(--correct);
+}
+
+.result-status.wrong {
+  color: var(--wrong);
+}
+
+.aplus-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aplus-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.aplus-row.answered {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.aplus-badge {
+  min-width: 34px;
+  padding: 6px 0;
+  border-radius: 8px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.aplus-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  background: var(--secondary-bg);
+}
+
+.aplus-kbd-btn {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1.5px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.aplus-kbd-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.math-keyboard {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+  padding: 8px 10px calc(10px + var(--safe-bottom));
+}
+
+.math-keyboard-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.math-keyboard-tab {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--hint);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.math-keyboard-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.math-keyboard-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.math-keyboard-key {
+  padding: 10px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.math-keyboard-key.wide {
+  grid-column: span 2;
+}
+
+.math-keyboard-key.danger {
+  color: var(--wrong);
+}
+
+.math-keyboard-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.math-keyboard-done {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 700;
+}

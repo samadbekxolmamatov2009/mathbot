@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>A+ yaratish</title>
+<link rel="stylesheet" href="/style.css" />
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div class="progress" id="progress">0 / 2 belgilandi</div>
+  <div class="header">
+    <h1>A+ — yozma javoblar</h1>
+    <p>Har bir savol uchun to'g'ri javobni kiriting. ⌨ tugmasi orqali maxsus belgilarni qo'shishingiz mumkin.</p>
+  </div>
+  <div class="question-list" id="questionList"></div>
+
+  <div class="question-count-bar" id="questionCountBar">
+    <button type="button" class="count-btn" id="minusBtn">−</button>
+    <span id="questionCountLabel">1 ta savol</span>
+    <button type="button" class="count-btn" id="plusBtn">+</button>
+  </div>
+
+  <div id="timeState" style="display:none">
+    <div class="header">
+      <h1>Test ma'lumotlari</h1>
+      <p>Testga nom bering va qachon boshlanib, qachon tugashini belgilang.</p>
+    </div>
+    <div class="time-field">
+      <label for="testName">Test nomi</label>
+      <input type="text" id="testName" placeholder="Masalan: A+ 6-test" maxlength="100" />
+    </div>
+    <div class="time-field">
+      <label for="startDate">Boshlanish vaqti</label>
+      <div class="datetime-row">
+        <input type="date" id="startDate" />
+        <select id="startHour"></select>
+        <span class="time-sep">:</span>
+        <select id="startMinute"></select>
+      </div>
+    </div>
+    <div class="time-field">
+      <label for="endDate">Tugash vaqti</label>
+      <div class="datetime-row">
+        <input type="date" id="endDate" />
+        <select id="endHour"></select>
+        <span class="time-sep">:</span>
+        <select id="endMinute"></select>
+      </div>
+    </div>
+  </div>
+
+  <div id="successState" style="display:none">
+    <div class="result-card">
+      <p id="resultTitle">✅ A+ test muvaffaqiyatli yaratildi</p>
+      <div class="result-score" id="testCode"></div>
+      <p id="resultHint" style="margin-top:10px">Bu kodni o'quvchilarga bering</p>
+    </div>
+  </div>
+
+  <script src="/math_keyboard.js?v=1"></script>
+  <script src="/aplus_admin.js?v=1"></script>
+</body>
+</html>
