@@ -2,7 +2,7 @@ import os
 
 # Bot tokenini @BotFather dan oling.
 # Terminalga: export BOT_TOKEN="YOUR_TOKEN_HERE"
-BOT_TOKEN = os.getenv("BOT_TOKEN", "7702163893:AAHsFojA3DzEwZTCh-vWaq_1_s0REhkjNvU")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8653349488:AAFRazdfQJO_YQ_v2PbXeGCC58ckC83Oz5s)
 if not BOT_TOKEN:
     raise RuntimeError(
         "BOT_TOKEN topilmadi. Telegram bot tokenini @BotFather dan oling va "
