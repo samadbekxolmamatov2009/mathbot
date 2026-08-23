@@ -19,6 +19,14 @@ from config import TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
 if TURSO_DATABASE_URL:
     import libsql_client
 
+    # Turso dashboard/CLI har doim "libsql://" manzilini ko'rsatadi, lekin
+    # shu Python client kutubxonasida "libsql://" -> WebSocket (wss://)
+    # protokoliga aylanadi va Turso serveri bilan handshake xatosi beradi.
+    # "https://" (oddiy HTTP protokol) esa ishonchli ishlaydi - shuning
+    # uchun manzil qanday kiritilishidan qat'iy nazar shu yerda avtomatik
+    # to'g'irlanadi.
+    _RESOLVED_URL = TURSO_DATABASE_URL.replace("libsql://", "https://", 1)
+
     class _Cursor:
         def __init__(self, result_set):
             self._rows = iter(result_set.rows)
@@ -67,7 +75,7 @@ if TURSO_DATABASE_URL:
     class Connection:
         def __init__(self):
             self._client = libsql_client.create_client(
-                url=TURSO_DATABASE_URL, auth_token=TURSO_AUTH_TOKEN
+                url=_RESOLVED_URL, auth_token=TURSO_AUTH_TOKEN
             )
             # Moslik uchun saqlanadi (aiosqlite'da "db.row_factory = aiosqlite.Row"
             # deb yoziladi) - Turso qatorlari indeks va nom orqali ham allaqachon
