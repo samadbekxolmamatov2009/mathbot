@@ -37,6 +37,16 @@ def is_boss(user_id: int) -> bool:
 
 DB_PATH = "mathbot.db"
 
+# Turso (libSQL) - tarmoq orqali ulaniladigan baza. Render'da botlar
+# (Background Worker) va Mini App backend (Web Service) ikkita alohida
+# konteynerda ishlaydi va oddiy SQLite fayl bilan bazani bo'lisha olmaydi -
+# shu ikkalasi BIR XIL bazani ko'rishi uchun shu ikki o'zgaruvchi ikkala
+# service'da ham bir xil qiymat bilan sozlanishi kerak.
+# Sozlanmagan bo'lsa (masalan lokal ishlab chiqishda), oddiy mahalliy
+# SQLite fayl (yuqoridagi DB_PATH) ishlatiladi - hech narsa talab qilinmaydi.
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
+
 # Kurslar: har biri o'z guruh havolasiga ega
 # group_link o'rniga o'zingizning guruh/kanal invite havolangizni qo'ying
 COURSES = {

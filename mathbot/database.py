@@ -1,7 +1,11 @@
 import json
 from datetime import datetime
 
-import aiosqlite
+# db_backend - TURSO_DATABASE_URL sozlangan bo'lsa Turso (tarmoq bazasi),
+# aks holda oddiy mahalliy SQLite fayl bilan ishlaydi - aiosqlite bilan
+# bir xil interfeys bergani uchun pastdagi SQL so'rovlarning birortasi
+# ham o'zgartirilishi shart emas.
+import db_backend as aiosqlite
 from config import DB_PATH
 
 
