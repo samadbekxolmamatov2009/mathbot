@@ -44,8 +44,13 @@ DB_PATH = "mathbot.db"
 # service'da ham bir xil qiymat bilan sozlanishi kerak.
 # Sozlanmagan bo'lsa (masalan lokal ishlab chiqishda), oddiy mahalliy
 # SQLite fayl (yuqoridagi DB_PATH) ishlatiladi - hech narsa talab qilinmaydi.
-TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "")
-TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "")
+# .strip() muhim: Render'ga token/URL nusxalab joylashtirilganda oxiriga
+# tasodifan bo'sh joy yoki yangi qator belgisi (\n) qo'shilib qolishi mumkin.
+# Bunday "ko'rinmas" belgi Turso'ga so'rov yuborilganda "Forbidden control
+# character detected in headers" xatosiga va HAR BIR so'rovning
+# muvaffaqiyatsiz bo'lishiga olib keladi.
+TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "").strip()
+TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "").strip()
 
 # Kurslar: har biri o'z guruh havolasiga ega
 # group_link o'rniga o'zingizning guruh/kanal invite havolangizni qo'ying
