@@ -4,6 +4,7 @@ import os
 import tempfile
 from datetime import datetime
 
+import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import FSInputFile
@@ -18,7 +19,25 @@ from config import (
     REPORT_INTERVAL_SECONDS,
     WEBAPP_HOST,
     WEBAPP_PORT,
+    WEBAPP_URL,
 )
+
+KEEP_ALIVE_INTERVAL_SECONDS = 600  # 10 daqiqa
+
+
+async def keep_webapp_alive_loop():
+    """mathbot-1 (Render Free Web Service) 15 daqiqa harakatsizlikdan keyin
+    "uxlab qolib", keyingi haqiqiy so'rovga sekin/xato javob bermasligi uchun,
+    uni shu worker (hech qachon uxlamaydigan Background Worker) ichidan
+    muntazam ping qilib turadi."""
+    async with aiohttp.ClientSession() as session:
+        while True:
+            try:
+                async with session.get(WEBAPP_URL, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                    logging.info(f"Keep-alive ping: {WEBAPP_URL} -> {resp.status}")
+            except Exception:
+                logging.exception("Keep-alive ping muvaffaqiyatsiz")
+            await asyncio.sleep(KEEP_ALIVE_INTERVAL_SECONDS)
 import database as db
 from database import init_db
 from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
@@ -160,6 +179,7 @@ async def main():
     await bot.delete_webhook(drop_pending_updates=True)
 
     await start_webapp_server()
+    asyncio.create_task(keep_webapp_alive_loop())
     asyncio.create_task(send_weekly_report_loop(bot))
     asyncio.create_task(send_test_results_loop(bot))
     asyncio.create_task(send_aplus_results_loop(bot))
