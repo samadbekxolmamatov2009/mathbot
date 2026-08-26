@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 import database as db
-from config import ADMIN_IDS, BOSS_IDS, DEFAULT_ADMIN_CONTACT_URL, is_boss
+from config import ADMIN_IDS, BOSS_IDS, DEFAULT_ADMIN_CONTACT_URL, REPORT_CHANNEL, is_boss
 from states import Boss
 from keyboards import NAV_BUTTON_TEXTS
 
@@ -26,6 +26,7 @@ router.callback_query.filter(F.message.chat.type == "private")
         Boss.waiting_score_delta,
         Boss.waiting_score_reason,
         Boss.waiting_admin_contact_url,
+        Boss.waiting_report_channel,
     ),
     Command("cancel"),
 )
@@ -313,6 +314,43 @@ async def boss_admin_contact_save(message: Message, state: FSMContext):
     await state.clear()
     await db.set_setting("admin_contact_url", url)
     await message.answer(f"✅ Admin havolasi yangilandi:\n{url}")
+
+
+# ---------- Xabar/hisobot yuboriladigan kanalni o'zgartirish ----------
+
+@router.message(F.text == "📡 Kanalni o'zgartirish")
+async def boss_report_channel_button(message: Message, state: FSMContext):
+    if not is_boss(message.from_user.id):
+        return
+
+    current = await db.get_setting("report_channel_id", REPORT_CHANNEL)
+    await state.set_state(Boss.waiting_report_channel)
+    await message.answer(
+        f"Hozirgi kanal: <code>{current}</code>\n\n"
+        "Haftalik hisobot va \"⚙️ Sozlamalar\"da belgilangan xabarlar endi qaysi "
+        "kanalga yuborilishi kerak? Kanal username'ini (masalan "
+        "<code>@turbomathka</code>) yoki kanal ID'sini yuboring.\n"
+        "Bot o'sha kanalda admin bo'lishi shart. Bekor qilish uchun /cancel.",
+        parse_mode="HTML",
+    )
+
+
+@router.message(Boss.waiting_report_channel, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
+async def boss_report_channel_save(message: Message, state: FSMContext):
+    if not is_boss(message.from_user.id):
+        return
+
+    value = message.text.strip()
+    if not (value.startswith("@") or value.startswith("-") or value.lstrip("-").isdigit()):
+        await message.answer(
+            "Kanal username'i @ bilan boshlanishi yoki kanal ID (masalan -1001234567890) "
+            "bo'lishi kerak. Qayta kiriting:"
+        )
+        return
+
+    await state.clear()
+    await db.set_setting("report_channel_id", value)
+    await message.answer(f"✅ Kanal yangilandi:\n<code>{value}</code>", parse_mode="HTML")
 
 
 @router.message(Command("boss_score"))
