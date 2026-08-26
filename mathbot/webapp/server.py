@@ -4,6 +4,8 @@ Bitta aiohttp ilova ham statik fayllarni (HTML/CSS/JS), ham API'ni xizmat qiladi
 (shu sabab CORS sozlash shart emas - hammasi bitta origin'dan).
 """
 
+import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -16,8 +18,6 @@ from datetime import datetime
 from urllib.parse import parse_qsl
 
 from aiohttp import web
-
-import asyncio
 
 import config
 import database as db
@@ -406,8 +406,9 @@ async def get_broadcast_schedule_handler(request: web.Request):
         return web.json_response({"error": "not_admin"}, status=403)
 
     schedule = await db.get_broadcast_schedule()
+    hourly_enabled = (await db.get_setting("hourly_report_enabled", "0")) == "1"
     if not schedule:
-        return web.json_response({"schedule": None})
+        return web.json_response({"schedule": None, "hourly_report_enabled": hourly_enabled})
 
     return web.json_response(
         {
@@ -416,7 +417,9 @@ async def get_broadcast_schedule_handler(request: web.Request):
                 "day_of_week": schedule["day_of_week"],
                 "time_of_day": schedule["time_of_day"],
                 "enabled": bool(schedule["enabled"]),
-            }
+                "file_name": schedule["file_name"],
+            },
+            "hourly_report_enabled": hourly_enabled,
         }
     )
 
@@ -433,22 +436,85 @@ async def save_broadcast_schedule_handler(request: web.Request):
     if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
+    if "hourly_report_enabled" in body:
+        await db.set_setting(
+            "hourly_report_enabled", "1" if body.get("hourly_report_enabled") else "0"
+        )
+
     message = (body.get("message") or "").strip()
-    if not message:
-        return web.json_response({"error": "missing_message"}, status=400)
-
     day_of_week = body.get("day_of_week")
-    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
-        return web.json_response({"error": "invalid_day"}, status=400)
-
     time_of_day = body.get("time_of_day") or ""
-    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
-        return web.json_response({"error": "invalid_time"}, status=400)
-
     enabled = bool(body.get("enabled", True))
 
-    await db.save_broadcast_schedule(message, day_of_week, time_of_day, enabled, user["id"])
+    # Xabar/kun/vaqt yuborilmagan bo'lishi mumkin - masalan admin faqat
+    # soatlik hisobot tugmasini bosgan bo'lishi mumkin. Bunday holda
+    # rejalashtirilgan xabarga tegilmaymiz.
+    if message or day_of_week is not None or time_of_day:
+        if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
+            return web.json_response({"error": "invalid_day"}, status=400)
+        if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
+            return web.json_response({"error": "invalid_time"}, status=400)
 
+        existing = await db.get_broadcast_schedule()
+        has_file = bool(existing and existing["file_data"])
+        if not message and not has_file:
+            return web.json_response({"error": "missing_message"}, status=400)
+
+        await db.save_broadcast_schedule(message, day_of_week, time_of_day, enabled, user["id"])
+
+    return web.json_response({"ok": True})
+
+
+MAX_BROADCAST_FILE_SIZE = 15 * 1024 * 1024  # 15 MB - Telegram bot API hujjat chegarasidan xavfsiz past
+
+
+async def upload_broadcast_file_handler(request: web.Request):
+    user = verify_init_data(request.query.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "file":
+        return web.json_response({"error": "missing_file"}, status=400)
+
+    file_name = field.filename or "fayl.pdf"
+    chunks = []
+    total = 0
+    while True:
+        chunk = await field.read_chunk()
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_BROADCAST_FILE_SIZE:
+            return web.json_response({"error": "file_too_large"}, status=400)
+        chunks.append(chunk)
+
+    file_bytes = b"".join(chunks)
+    if not file_bytes:
+        return web.json_response({"error": "empty_file"}, status=400)
+
+    file_data_b64 = base64.b64encode(file_bytes).decode("ascii")
+    await db.set_broadcast_schedule_file(file_data_b64, file_name, user["id"])
+
+    return web.json_response({"ok": True, "file_name": file_name})
+
+
+async def remove_broadcast_file_handler(request: web.Request):
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    user = verify_init_data(body.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    await db.set_broadcast_schedule_file(None, None, user["id"])
     return web.json_response({"ok": True})
 
 
@@ -786,6 +852,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/my_results", my_results_handler)
     app.router.add_get("/api/broadcast_schedule", get_broadcast_schedule_handler)
     app.router.add_post("/api/broadcast_schedule", save_broadcast_schedule_handler)
+    app.router.add_post("/api/broadcast_schedule/file", upload_broadcast_file_handler)
+    app.router.add_post("/api/broadcast_schedule/file/remove", remove_broadcast_file_handler)
     app.router.add_post("/api/aplus/create_test", aplus_create_test_handler)
     app.router.add_get("/api/aplus/test_by_id/{id}", aplus_get_edit_data_handler)
     app.router.add_post("/api/aplus/test_by_id/{id}/update", aplus_update_test_handler)
