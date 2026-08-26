@@ -10,6 +10,10 @@ const minuteSelect = document.getElementById("minuteSelect");
 const statusLine = document.getElementById("statusLine");
 const formStateEl = document.getElementById("formState");
 const successStateEl = document.getElementById("successState");
+const fileInput = document.getElementById("fileInput");
+const fileNameLabel = document.getElementById("fileNameLabel");
+const removeFileBtn = document.getElementById("removeFileBtn");
+const hourlyReportToggle = document.getElementById("hourlyReportToggle");
 
 const WEEKDAY_NAMES = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"];
 
@@ -56,7 +60,8 @@ function updateStatus() {
 }
 
 function updateButton() {
-  const valid = !!messageText.value.trim();
+  const hasFile = removeFileBtn.style.display !== "none";
+  const valid = !!messageText.value.trim() || hasFile;
   tg.MainButton.setText("Saqlash");
   tg.MainButton.show();
   if (valid) {
@@ -89,17 +94,86 @@ async function loadSchedule() {
       hourSelect.value = h;
       minuteSelect.value = m;
       enabledToggle.checked = data.schedule.enabled;
+      setFileName(data.schedule.file_name);
     } else {
       selectDay(0);
       hourSelect.value = "09";
       minuteSelect.value = "00";
+      setFileName(null);
     }
+    hourlyReportToggle.checked = !!data.hourly_report_enabled;
     updateStatus();
     updateButton();
   } catch (e) {
     statusLine.textContent = "Server bilan bog'lanishda xatolik.";
   }
 }
+
+function setFileName(name) {
+  if (name) {
+    fileNameLabel.textContent = `📎 ${name}`;
+    removeFileBtn.style.display = "inline-block";
+  } else {
+    fileNameLabel.textContent = "Biriktirilmagan";
+    removeFileBtn.style.display = "none";
+  }
+}
+
+fileInput.addEventListener("change", async () => {
+  const file = fileInput.files[0];
+  if (!file) return;
+  fileNameLabel.textContent = "⏳ Yuklanmoqda...";
+  try {
+    const formData = new FormData();
+    formData.append("file", file, file.name);
+    const res = await fetch(
+      `/api/broadcast_schedule/file?init_data=${encodeURIComponent(tg.initData)}`,
+      { method: "POST", body: formData }
+    );
+    const data = await res.json();
+    if (!res.ok) {
+      tg.showAlert("Faylni yuklashda xatolik yuz berdi.");
+      setFileName(null);
+      return;
+    }
+    setFileName(data.file_name);
+  } catch (e) {
+    tg.showAlert("Server bilan bog'lanishda xatolik.");
+    setFileName(null);
+  } finally {
+    fileInput.value = "";
+  }
+  updateButton();
+});
+
+removeFileBtn.addEventListener("click", async () => {
+  try {
+    await fetch("/api/broadcast_schedule/file/remove", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ init_data: tg.initData }),
+    });
+  } catch (e) {
+    // e'tiborsiz - baribir UI'ni tozalaymiz, keyingi ochilishda haqiqiy holat ko'rinadi
+  }
+  setFileName(null);
+  updateButton();
+});
+
+hourlyReportToggle.addEventListener("change", async () => {
+  try {
+    await fetch("/api/broadcast_schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        init_data: tg.initData,
+        hourly_report_enabled: hourlyReportToggle.checked,
+      }),
+    });
+  } catch (e) {
+    tg.showAlert("Server bilan bog'lanishda xatolik.");
+  }
+});
 
 async function saveSchedule() {
   tg.MainButton.showProgress();
