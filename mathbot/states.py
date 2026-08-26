@@ -58,3 +58,4 @@ class Boss(StatesGroup):
     waiting_score_id = State()
     waiting_score_delta = State()
     waiting_score_reason = State()
+    waiting_admin_contact_url = State()
