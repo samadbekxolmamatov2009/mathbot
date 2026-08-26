@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 import database as db
-from config import ADMIN_IDS, BOSS_IDS, is_boss
+from config import ADMIN_IDS, BOSS_IDS, DEFAULT_ADMIN_CONTACT_URL, is_boss
 from states import Boss
 from keyboards import NAV_BUTTON_TEXTS
 
@@ -25,6 +25,7 @@ router.callback_query.filter(F.message.chat.type == "private")
         Boss.waiting_score_id,
         Boss.waiting_score_delta,
         Boss.waiting_score_reason,
+        Boss.waiting_admin_contact_url,
     ),
     Command("cancel"),
 )
@@ -277,6 +278,41 @@ async def _finish_score_adjustment(message: Message, state: FSMContext, reason: 
         f"Joriy jami ball: <b>{coins['total']}</b>",
         parse_mode="HTML",
     )
+
+
+# ---------- "Adminga xabar" tugmasidagi havolani o'zgartirish ----------
+
+@router.message(F.text == "🔗 Admin havolasini o'zgartirish")
+async def boss_admin_contact_button(message: Message, state: FSMContext):
+    if not is_boss(message.from_user.id):
+        return
+
+    current = await db.get_setting("admin_contact_url", DEFAULT_ADMIN_CONTACT_URL)
+    await state.set_state(Boss.waiting_admin_contact_url)
+    await message.answer(
+        f"Hozirgi havola: {current}\n\n"
+        "O'quvchilarga \"📩 Adminga xabar\" tugmasi bosilganda ko'rinadigan "
+        "yangi havolani yuboring (masalan: <code>https://t.me/username</code>).\n"
+        "Bekor qilish uchun /cancel bosing.",
+        parse_mode="HTML",
+    )
+
+
+@router.message(Boss.waiting_admin_contact_url, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
+async def boss_admin_contact_save(message: Message, state: FSMContext):
+    if not is_boss(message.from_user.id):
+        return
+
+    url = message.text.strip()
+    if not (url.startswith("https://t.me/") or url.startswith("https://") or url.startswith("http://")):
+        await message.answer(
+            "Havola https:// bilan boshlanishi kerak (masalan https://t.me/username). Qayta kiriting:"
+        )
+        return
+
+    await state.clear()
+    await db.set_setting("admin_contact_url", url)
+    await message.answer(f"✅ Admin havolasi yangilandi:\n{url}")
 
 
 @router.message(Command("boss_score"))
