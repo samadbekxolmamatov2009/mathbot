@@ -39,6 +39,7 @@ const els = {
   scoreValue: document.getElementById("scoreValue"),
   scoreTotal: document.getElementById("scoreTotal"),
   resultList: document.getElementById("resultList"),
+  closeAppBtn: document.getElementById("closeAppBtn"),
 };
 
 let loadingHintTimer = null;
@@ -177,6 +178,11 @@ function renderResult(score, total, details) {
   });
 
   els.resultState.hidden = false;
+
+  if (isTelegram) {
+    els.closeAppBtn.hidden = false;
+    els.closeAppBtn.onclick = () => tg.close();
+  }
 }
 
 async function submitTest() {
