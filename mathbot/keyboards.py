@@ -27,6 +27,7 @@ BOSS_MENU_TEXTS = {
     "➖ Adminni olib tashlash",
     "⚖️ Ball o'zgartirish",
     "🔗 Admin havolasini o'zgartirish",
+    "📡 Kanalni o'zgartirish",
 }
 
 MAIN_MENU_TEXTS = {
@@ -155,6 +156,9 @@ def boss_menu_keyboard():
             [
                 KeyboardButton(text="🔗 Admin havolasini o'zgartirish"),
             ],
+            [
+                KeyboardButton(text="📡 Kanalni o'zgartirish"),
+            ],
         ],
         resize_keyboard=True,
     )
@@ -185,3 +189,4 @@ def main_menu_keyboard():
         ],
         resize_keyboard=True,
     )
+    
