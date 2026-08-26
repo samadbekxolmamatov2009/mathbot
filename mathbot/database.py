@@ -134,7 +134,9 @@ async def init_db():
                 enabled INTEGER NOT NULL DEFAULT 1,
                 updated_by INTEGER,
                 updated_at TEXT DEFAULT (datetime('now')),
-                last_sent_week TEXT
+                last_sent_week TEXT,
+                file_data TEXT,
+                file_name TEXT
             )
         """)
         await db.execute("""
@@ -158,6 +160,20 @@ async def init_db():
                 created_at TEXT DEFAULT (datetime('now'))
             )
         """)
+
+        # Eski (migratsiyadan oldin yaratilgan) bazalarda broadcast_schedule
+        # jadvalida file_data/file_name ustunlari bo'lmasligi mumkin - CREATE
+        # TABLE IF NOT EXISTS eski jadvalni o'zgartirmaydi, shuning uchun
+        # ustunlarni alohida qo'shishga harakat qilamiz (allaqachon bo'lsa,
+        # xato e'tiborsiz qoldiriladi).
+        for column_sql in (
+            "ALTER TABLE broadcast_schedule ADD COLUMN file_data TEXT",
+            "ALTER TABLE broadcast_schedule ADD COLUMN file_name TEXT",
+        ):
+            try:
+                await db.execute(column_sql)
+            except Exception:
+                pass
 
         # Birinchi ishga tushishda config.py'dagi statik ADMIN_IDS bilan
         # "admins" jadvalini boshlang'ich holatga keltiradi (keyinchalik
@@ -980,5 +996,25 @@ async def mark_broadcast_sent(week_key: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             "UPDATE broadcast_schedule SET last_sent_week = ? WHERE id = 1", (week_key,)
+        )
+        await db.commit()
+
+
+async def set_broadcast_schedule_file(file_data: str | None, file_name: str | None, updated_by: int):
+    """Rejalashtirilgan xabarga PDF (yoki boshqa fayl) biriktiradi/olib tashlaydi
+    (file_data=None bo'lsa - olib tashlash). Agar hali umuman sozlama
+    saqlanmagan bo'lsa (birinchi marta), bo'sh qiymatlar bilan qator yaratadi -
+    admin keyinroq matn/kun/vaqtni "⚙️ Sozlamalar"dan to'ldirishi mumkin."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO broadcast_schedule
+                   (id, message, day_of_week, time_of_day, enabled, updated_by, updated_at, file_data, file_name)
+               VALUES (1, '', 0, '09:00', 0, ?, datetime('now'), ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   file_data = excluded.file_data,
+                   file_name = excluded.file_name,
+                   updated_by = excluded.updated_by,
+                   updated_at = excluded.updated_at""",
+            (updated_by, file_data, file_name),
         )
         await db.commit()
