@@ -61,6 +61,12 @@ COURSES = {
     },
 }
 
+# "Adminga xabar" tugmasidagi standart havola - Boss "🔗 Admin havolasini
+# o'zgartirish" tugmasi orqali bazada saqlangan qiymat bilan buni
+# almashtirishi mumkin (database.py: get_setting/set_setting). Bu shunchaki
+# hech qachon o'zgartirilmagan holatdagi zaxira (fallback) qiymat.
+DEFAULT_ADMIN_CONTACT_URL = "https://t.me/xolmamatov09"
+
 # Haftalik hisobot PDF shu kanalga yuboriladi.
 # Bot shu kanalda ADMIN bo'lishi va "Xabarlarni yuborish" huquqiga ega bo'lishi kerak.
 REPORT_CHANNEL = "@turbomathka"
