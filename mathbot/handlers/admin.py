@@ -79,6 +79,28 @@ async def clear_admin_menu_for(bot, admin_id: int):
         pass
 
 
+@router.message(Command("get_sticker_id"))
+async def cmd_get_sticker_id_prompt(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    await message.answer(
+        "Fayl ID'sini bilmoqchi bo'lgan stikeringizni shu chatga yuboring "
+        "(yoki forward qiling) — men uning file_id'sini qaytaraman."
+    )
+
+
+@router.message(F.sticker)
+async def cmd_get_sticker_id(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+    await message.answer(
+        f"🆔 Sticker file_id:\n<code>{message.sticker.file_id}</code>\n\n"
+        "Buni <code>registration.py</code> faylidagi <code>WELCOME_STICKER_FILE_ID</code> "
+        "qatoriga qo'ying.",
+        parse_mode="HTML",
+    )
+
+
 @router.message(Command("help"))
 @router.message(F.text == "ℹ️ Yordam")
 async def cmd_help(message: Message):
@@ -372,7 +394,7 @@ async def open_settings_app(message: Message):
         ]
     )
     await message.answer(
-        "Haftalik avtomatik xabar rejasini shu yerdan sozlashingiz mumkin — "
-        "qaysi kuni, qaysi vaqtda, qanday xabar yuborilishini belgilang:",
+        "Avtomatik xabar rejasini shu yerdan sozlashingiz mumkin — "
+        "qaysi kuni, qaysi vaqtda, qanday xabar kanalga yuborilishini belgilang:",
         reply_markup=kb,
     )
