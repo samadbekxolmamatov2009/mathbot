@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 import os
 import tempfile
@@ -7,7 +8,7 @@ from datetime import datetime
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import FSInputFile
+from aiogram.types import BufferedInputFile, FSInputFile
 from aiohttp import web
 
 import config
@@ -51,11 +52,17 @@ BROADCAST_CHECK_INTERVAL = 30
 
 
 async def send_weekly_report_loop(bot: Bot):
-    """Har REPORT_INTERVAL_SECONDS soniyada haftalik hisobot PDF faylini kanalga yuboradi."""
+    """Har REPORT_INTERVAL_SECONDS soniyada hisobot PDF faylini yuborishga
+    urinadi - lekin FAQAT "⚙️ Sozlamalar" orqali "Avtomatik soatlik hisobot"
+    yoqilgan bo'lsa (standart holatda o'chirilgan, chunki bu keraksiz
+    ma'lumot bilan kanalni to'ldirib yuborardi)."""
     while True:
         try:
-            generate_weekly_report(REPORT_PATH)
-            await bot.send_document(REPORT_CHANNEL, FSInputFile(REPORT_PATH))
+            hourly_enabled = await db.get_setting("hourly_report_enabled", "0")
+            if hourly_enabled == "1":
+                channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
+                generate_weekly_report(REPORT_PATH)
+                await bot.send_document(channel, FSInputFile(REPORT_PATH))
         except Exception:
             logging.exception("Haftalik hisobotni kanalga yuborishda xatolik yuz berdi")
         await asyncio.sleep(REPORT_INTERVAL_SECONDS)
@@ -112,9 +119,10 @@ async def send_aplus_results_loop(bot: Bot):
 
 
 async def send_broadcast_schedule_loop(bot: Bot):
-    """Rejalashtirilgan xabarni belgilangan kun/vaqtda REPORT_CHANNEL'ga yuboradi
+    """Rejalashtirilgan xabarni belgilangan kun/vaqtda kanalga yuboradi
     (har bir foydalanuvchiga alohida emas - "⚙️ Sozlamalar" orqali admin
-    belgilagan kun/vaqtda, kodda ko'rsatilgan kanalga bitta xabar)."""
+    belgilagan kun/vaqtda, biriktirilgan fayl (masalan PDF) bo'lsa hujjat
+    sifatida, bo'lmasa oddiy matn sifatida, sozlamalardagi kanalga)."""
     while True:
         try:
             schedule = await db.get_broadcast_schedule()
@@ -126,8 +134,18 @@ async def send_broadcast_schedule_loop(bot: Bot):
                     and now.strftime("%H:%M") == schedule["time_of_day"]
                     and schedule["last_sent_week"] != current_week
                 ):
+                    channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
                     try:
-                        await bot.send_message(REPORT_CHANNEL, schedule["message"])
+                        file_data = schedule["file_data"]
+                        if file_data:
+                            file_bytes = base64.b64decode(file_data)
+                            file_name = schedule["file_name"] or "fayl.pdf"
+                            document = BufferedInputFile(file_bytes, filename=file_name)
+                            await bot.send_document(
+                                channel, document, caption=(schedule["message"] or None)
+                            )
+                        else:
+                            await bot.send_message(channel, schedule["message"])
                     except Exception:
                         logging.exception("Rejalashtirilgan xabarni kanalga yuborishda xatolik")
                     await db.mark_broadcast_sent(current_week)
