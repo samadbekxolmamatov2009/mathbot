@@ -13,7 +13,7 @@ from aiogram.types import (
 )
 
 import database as db
-from config import ADMIN_IDS, COURSES, WEBAPP_URL
+from config import ADMIN_IDS, COURSES, WEBAPP_URL, DEFAULT_ADMIN_CONTACT_URL
 from states import ProfileEdit
 from keyboards import NAV_BUTTON_TEXTS, regions_keyboard, districts_keyboard, phone_request_keyboard
 
@@ -22,7 +22,6 @@ router.message.filter(F.chat.type == "private")
 router.callback_query.filter(F.message.chat.type == "private")
 
 WEBAPP_BASE = WEBAPP_URL.rstrip("/")
-ADMIN_CONTACT_URL = "https://t.me/xolmamatov09"
 PHONE_RE = re.compile(r"^\+998\d{9}$")
 
 
@@ -240,9 +239,10 @@ async def contact_admin_prompt(message: Message):
     if not await _ensure_registered(message):
         return
 
+    admin_contact_url = await db.get_setting("admin_contact_url", DEFAULT_ADMIN_CONTACT_URL)
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="👤 Administrator bilan bog'lanish", url=ADMIN_CONTACT_URL)],
+            [InlineKeyboardButton(text="👤 Administrator bilan bog'lanish", url=admin_contact_url)],
         ]
     )
     await message.answer(
