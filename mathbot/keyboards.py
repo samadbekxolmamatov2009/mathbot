@@ -26,6 +26,7 @@ BOSS_MENU_TEXTS = {
     "➕ Admin qo'shish",
     "➖ Adminni olib tashlash",
     "⚖️ Ball o'zgartirish",
+    "🔗 Admin havolasini o'zgartirish",
 }
 
 MAIN_MENU_TEXTS = {
@@ -47,7 +48,7 @@ def role_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 InlineKeyboardButton(text="🎓 O'quvchi", callback_data="role:student"),
-                InlineKeyboardButton(text="🍎 O'qituvchi", callback_data="role:teacher"),
+                InlineKeyboardButton(text="O'qituvchi", callback_data="role:teacher"),
             ]
         ]
     )
@@ -150,6 +151,9 @@ def boss_menu_keyboard():
             ],
             [
                 KeyboardButton(text="⚖️ Ball o'zgartirish"),
+            ],
+            [
+                KeyboardButton(text="🔗 Admin havolasini o'zgartirish"),
             ],
         ],
         resize_keyboard=True,
