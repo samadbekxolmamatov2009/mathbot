@@ -17,10 +17,15 @@ from urllib.parse import parse_qsl
 
 from aiohttp import web
 
+import asyncio
+
+import config
 import database as db
 from answer_check import answers_equivalent
 from config import ALLOWED_ORIGINS, BOT_TOKEN, is_admin
 from quiz_structure import all_questions, options_for, DEFAULT_TOTAL_QUESTIONS
+
+ADMIN_SYNC_INTERVAL_SECONDS = 60
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 MAX_INIT_DATA_AGE = 24 * 60 * 60  # 24 soat
@@ -737,8 +742,40 @@ async def cors_middleware(request: web.Request, handler):
     return response
 
 
+async def _refresh_admin_ids_loop():
+    """mathbot-1 (Mini App backend) va bot (worker) ALOHIDA jarayonlar bo'lgani
+    uchun, Boss botda yangi admin qo'shsa/olib tashlasa, bu o'zgarish worker
+    xotirasida darhol ko'rinadi-yu, lekin shu (web) jarayon buni umuman
+    bilmaydi - natijada yangi admin Mini App funksiyalaridan (A+ yaratish,
+    sozlamalar va h.k.) foydalana olmay qoladi. Shu funksiya har
+    ADMIN_SYNC_INTERVAL_SECONDS'da adminlar ro'yxatini bazadan qayta o'qib,
+    config.ADMIN_IDS'ni yangilab turadi."""
+    while True:
+        try:
+            config.ADMIN_IDS[:] = await db.get_admin_ids()
+        except Exception:
+            log.exception("Adminlar ro'yxatini yangilashda xatolik")
+        await asyncio.sleep(ADMIN_SYNC_INTERVAL_SECONDS)
+
+
+async def _on_startup(app: web.Application):
+    try:
+        config.ADMIN_IDS[:] = await db.get_admin_ids()
+    except Exception:
+        log.exception("Adminlar ro'yxatini boshlang'ich yuklashda xatolik")
+    app["admin_sync_task"] = asyncio.create_task(_refresh_admin_ids_loop())
+
+
+async def _on_cleanup(app: web.Application):
+    task = app.get("admin_sync_task")
+    if task:
+        task.cancel()
+
+
 def create_app() -> web.Application:
     app = web.Application(middlewares=[cors_middleware, no_cache_middleware])
+    app.on_startup.append(_on_startup)
+    app.on_cleanup.append(_on_cleanup)
     app.router.add_post("/api/debug_log", debug_log_handler)
     app.router.add_post("/api/create_test", create_test_handler)
     app.router.add_get("/api/test_by_id/{id}", get_test_edit_data_handler)
