@@ -112,7 +112,9 @@ async def send_aplus_results_loop(bot: Bot):
 
 
 async def send_broadcast_schedule_loop(bot: Bot):
-    """Haftalik rejalashtirilgan xabarni belgilangan kun/vaqtda barcha foydalanuvchilarga yuboradi."""
+    """Rejalashtirilgan xabarni belgilangan kun/vaqtda REPORT_CHANNEL'ga yuboradi
+    (har bir foydalanuvchiga alohida emas - "⚙️ Sozlamalar" orqali admin
+    belgilagan kun/vaqtda, kodda ko'rsatilgan kanalga bitta xabar)."""
     while True:
         try:
             schedule = await db.get_broadcast_schedule()
@@ -124,13 +126,10 @@ async def send_broadcast_schedule_loop(bot: Bot):
                     and now.strftime("%H:%M") == schedule["time_of_day"]
                     and schedule["last_sent_week"] != current_week
                 ):
-                    users = await db.get_all_users()
-                    for u in users:
-                        try:
-                            await bot.send_message(u["telegram_id"], schedule["message"])
-                        except Exception:
-                            pass
-                        await asyncio.sleep(0.05)
+                    try:
+                        await bot.send_message(REPORT_CHANNEL, schedule["message"])
+                    except Exception:
+                        logging.exception("Rejalashtirilgan xabarni kanalga yuborishda xatolik")
                     await db.mark_broadcast_sent(current_week)
         except Exception:
             logging.exception("Rejalashtirilgan xabarni yuborishda xatolik yuz berdi")
