@@ -86,6 +86,17 @@ button {
   text-align: center;
 }
 
+.late-warning {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fdecea;
+  color: #b03a2e;
+  font-size: 13px;
+  text-align: center;
+  font-weight: 600;
+}
+
 #app {
   padding: 14px 14px 4px;
 }
