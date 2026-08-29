@@ -95,7 +95,7 @@ async def init_db():
                 test_id INTEGER NOT NULL,
                 telegram_id INTEGER NOT NULL,
                 answers TEXT NOT NULL,
-                score INTEGER NOT NULL,
+                score REAL NOT NULL,
                 submitted_at TEXT DEFAULT (datetime('now')),
                 UNIQUE(test_id, telegram_id)
             )
@@ -121,23 +121,9 @@ async def init_db():
                 test_id INTEGER NOT NULL,
                 telegram_id INTEGER NOT NULL,
                 answers TEXT NOT NULL,
-                score INTEGER NOT NULL,
+                score REAL NOT NULL,
                 submitted_at TEXT DEFAULT (datetime('now')),
                 UNIQUE(test_id, telegram_id)
-            )
-        """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS broadcast_schedule (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                message TEXT NOT NULL,
-                day_of_week INTEGER NOT NULL,
-                time_of_day TEXT NOT NULL,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                updated_by INTEGER,
-                updated_at TEXT DEFAULT (datetime('now')),
-                last_sent_week TEXT,
-                file_data TEXT,
-                file_name TEXT
             )
         """)
         await db.execute("""
@@ -173,14 +159,11 @@ async def init_db():
             )
         """)
 
-        # Eski (migratsiyadan oldin yaratilgan) bazalarda broadcast_schedule
-        # jadvalida file_data/file_name ustunlari bo'lmasligi mumkin - CREATE
-        # TABLE IF NOT EXISTS eski jadvalni o'zgartirmaydi, shuning uchun
-        # ustunlarni alohida qo'shishga harakat qilamiz (allaqachon bo'lsa,
-        # xato e'tiborsiz qoldiriladi).
+        # Eski bazalarda ba'zi ustunlar bo'lmasligi mumkin - CREATE TABLE IF
+        # NOT EXISTS eski jadvalni o'zgartirmaydi, shuning uchun ustunlarni
+        # alohida qo'shishga harakat qilamiz (allaqachon bo'lsa, xato
+        # e'tiborsiz qoldiriladi).
         for column_sql in (
-            "ALTER TABLE broadcast_schedule ADD COLUMN file_data TEXT",
-            "ALTER TABLE broadcast_schedule ADD COLUMN file_name TEXT",
             "ALTER TABLE tests ADD COLUMN notified INTEGER DEFAULT 0",
             "ALTER TABLE aplus_tests ADD COLUMN notified INTEGER DEFAULT 0",
             "ALTER TABLE special_tasks ADD COLUMN notified INTEGER DEFAULT 0",
@@ -970,69 +953,6 @@ async def get_leaderboard(limit: int = 50):
 
     leaderboard.sort(key=lambda r: (-r["coins"], r["full_name"] or ""))
     return leaderboard[:limit]
-
-
-# ---------- Rejalashtirilgan xabar (haftalik broadcast) ----------
-
-async def get_broadcast_schedule():
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM broadcast_schedule WHERE id = 1"
-        ) as cursor:
-            return await cursor.fetchone()
-
-
-async def save_broadcast_schedule(
-    message: str, day_of_week: int, time_of_day: str, enabled: bool, updated_by: int
-):
-    """Sozlamalar har safar saqlanganda `last_sent_week` ni ham tozalaydi —
-    aks holda admin xabar/vaqtni o'zgartirsa ham, shu hafta uchun "allaqachon
-    yuborilgan" deb hisoblanib, yangi sozlama hech qachon jo'natilmasdi."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """INSERT INTO broadcast_schedule
-                   (id, message, day_of_week, time_of_day, enabled, updated_by, updated_at, last_sent_week)
-               VALUES (1, ?, ?, ?, ?, ?, datetime('now'), NULL)
-               ON CONFLICT(id) DO UPDATE SET
-                   message = excluded.message,
-                   day_of_week = excluded.day_of_week,
-                   time_of_day = excluded.time_of_day,
-                   enabled = excluded.enabled,
-                   updated_by = excluded.updated_by,
-                   last_sent_week = NULL,
-                   updated_at = excluded.updated_at""",
-            (message, day_of_week, time_of_day, int(enabled), updated_by),
-        )
-        await db.commit()
-
-
-async def mark_broadcast_sent(week_key: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE broadcast_schedule SET last_sent_week = ? WHERE id = 1", (week_key,)
-        )
-        await db.commit()
-
-
-async def set_broadcast_schedule_file(file_data: str | None, file_name: str | None, updated_by: int):
-    """Rejalashtirilgan xabarga PDF (yoki boshqa fayl) biriktiradi/olib tashlaydi
-    (file_data=None bo'lsa - olib tashlash). Agar hali umuman sozlama
-    saqlanmagan bo'lsa (birinchi marta), bo'sh qiymatlar bilan qator yaratadi -
-    admin keyinroq matn/kun/vaqtni "⚙️ Sozlamalar"dan to'ldirishi mumkin."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """INSERT INTO broadcast_schedule
-                   (id, message, day_of_week, time_of_day, enabled, updated_by, updated_at, file_data, file_name)
-               VALUES (1, '', 0, '09:00', 0, ?, datetime('now'), ?, ?)
-               ON CONFLICT(id) DO UPDATE SET
-                   file_data = excluded.file_data,
-                   file_name = excluded.file_name,
-                   updated_by = excluded.updated_by,
-                   updated_at = excluded.updated_at""",
-            (updated_by, file_data, file_name),
-        )
-        await db.commit()
 
 
 # ---------- Haftalik hisobot rejasi (haqiqiy test natijalari asosida) ----------

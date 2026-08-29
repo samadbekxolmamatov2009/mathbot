@@ -65,8 +65,15 @@ function showTestName(name) {
   }
 }
 
-function showLateWarning() {
+function showLateWarning(endTime) {
+  const timeLabel = endTime ? formatDateTime(endTime) : "";
+  els.lateWarning.textContent = timeLabel
+    ? `⏰ Test vaqti ${timeLabel} da tugagan — javob berishingiz mumkin, ammo natija 75% hisoblanadi.`
+    : "⏰ Test vaqti tugagan — javob berishingiz mumkin, ammo natija 75% hisoblanadi.";
   els.lateWarning.hidden = false;
+  setTimeout(() => {
+    els.lateWarning.hidden = true;
+  }, 2000);
 }
 
 function showInfo(icon, text) {
@@ -272,7 +279,7 @@ async function init() {
     }
 
     if (data.window_status === "ended") {
-      showLateWarning();
+      showLateWarning(data.end_time);
     }
 
     questions = data.questions || [];

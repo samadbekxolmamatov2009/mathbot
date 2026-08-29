@@ -85,20 +85,6 @@ async def handle_web_app_data(message: Message):
             parse_mode="HTML",
             reply_markup=admin_menu_keyboard(),
         )
-    elif payload.get("type") == "schedule_saved":
-        if payload.get("enabled"):
-            await message.answer(
-                "✅ <b>Xabar rejasi saqlandi!</b>\n\n"
-                f"📅 Har {payload.get('day', '?')}, soat {payload.get('time', '?')} da "
-                "barcha o'quvchilarga avtomatik xabar yuboriladi.",
-                parse_mode="HTML",
-                reply_markup=admin_menu_keyboard(),
-            )
-        else:
-            await message.answer(
-                "🔕 Xabar rejasi saqlandi, lekin o'chirilgan holatda — avtomatik yuborilmaydi.",
-                reply_markup=admin_menu_keyboard(),
-            )
 
 
 # ---------- Admin: testlar ro'yxati, tahrirlash, bekor qilish ----------

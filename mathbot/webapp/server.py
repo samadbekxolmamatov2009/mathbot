@@ -5,7 +5,6 @@ Bitta aiohttp ilova ham statik fayllarni (HTML/CSS/JS), ham API'ni xizmat qiladi
 """
 
 import asyncio
-import base64
 import hashlib
 import hmac
 import json
@@ -342,7 +341,7 @@ async def submit_test_handler(request: web.Request):
         for q in range(1, total_questions + 1)
         if submitted_answers.get(str(q)) == correct_answers.get(str(q))
     )
-    score = round(raw_score * LATE_SUBMISSION_SCORE_RATIO) if is_late else raw_score
+    score = raw_score * LATE_SUBMISSION_SCORE_RATIO if is_late else raw_score
 
     await db.save_test_submission(test["id"], user["id"], submitted_answers, score)
 
@@ -408,62 +407,6 @@ async def my_results_handler(request: web.Request):
     )
 
 
-async def get_broadcast_schedule_handler(request: web.Request):
-    user = verify_init_data(request.query.get("init_data", ""))
-    if not user:
-        return web.json_response({"error": "invalid_init_data"}, status=401)
-    if not is_admin(user["id"]):
-        return web.json_response({"error": "not_admin"}, status=403)
-
-    schedule = await db.get_broadcast_schedule()
-    if not schedule:
-        return web.json_response({"schedule": None})
-
-    return web.json_response(
-        {
-            "schedule": {
-                "message": schedule["message"],
-                "day_of_week": schedule["day_of_week"],
-                "time_of_day": schedule["time_of_day"],
-                "enabled": bool(schedule["enabled"]),
-                "file_name": schedule["file_name"],
-            }
-        }
-    )
-
-
-async def save_broadcast_schedule_handler(request: web.Request):
-    try:
-        body = await request.json()
-    except json.JSONDecodeError:
-        return web.json_response({"error": "bad_request"}, status=400)
-
-    user = verify_init_data(body.get("init_data", ""))
-    if not user:
-        return web.json_response({"error": "invalid_init_data"}, status=401)
-    if not is_admin(user["id"]):
-        return web.json_response({"error": "not_admin"}, status=403)
-
-    message = (body.get("message") or "").strip()
-    day_of_week = body.get("day_of_week")
-    time_of_day = body.get("time_of_day") or ""
-    enabled = bool(body.get("enabled", True))
-
-    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
-        return web.json_response({"error": "invalid_day"}, status=400)
-    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
-        return web.json_response({"error": "invalid_time"}, status=400)
-
-    existing = await db.get_broadcast_schedule()
-    has_file = bool(existing and existing["file_data"])
-    if not message and not has_file:
-        return web.json_response({"error": "missing_message"}, status=400)
-
-    await db.save_broadcast_schedule(message, day_of_week, time_of_day, enabled, user["id"])
-
-    return web.json_response({"ok": True})
-
-
 async def get_report_schedule_handler(request: web.Request):
     user = verify_init_data(request.query.get("init_data", ""))
     if not user:
@@ -510,59 +453,6 @@ async def save_report_schedule_handler(request: web.Request):
 
     await db.save_report_schedule(day_of_week, time_of_day, enabled, user["id"])
 
-    return web.json_response({"ok": True})
-
-
-MAX_BROADCAST_FILE_SIZE = 15 * 1024 * 1024  # 15 MB - Telegram bot API hujjat chegarasidan xavfsiz past
-
-
-async def upload_broadcast_file_handler(request: web.Request):
-    user = verify_init_data(request.query.get("init_data", ""))
-    if not user:
-        return web.json_response({"error": "invalid_init_data"}, status=401)
-    if not is_admin(user["id"]):
-        return web.json_response({"error": "not_admin"}, status=403)
-
-    reader = await request.multipart()
-    field = await reader.next()
-    if field is None or field.name != "file":
-        return web.json_response({"error": "missing_file"}, status=400)
-
-    file_name = field.filename or "fayl.pdf"
-    chunks = []
-    total = 0
-    while True:
-        chunk = await field.read_chunk()
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > MAX_BROADCAST_FILE_SIZE:
-            return web.json_response({"error": "file_too_large"}, status=400)
-        chunks.append(chunk)
-
-    file_bytes = b"".join(chunks)
-    if not file_bytes:
-        return web.json_response({"error": "empty_file"}, status=400)
-
-    file_data_b64 = base64.b64encode(file_bytes).decode("ascii")
-    await db.set_broadcast_schedule_file(file_data_b64, file_name, user["id"])
-
-    return web.json_response({"ok": True, "file_name": file_name})
-
-
-async def remove_broadcast_file_handler(request: web.Request):
-    try:
-        body = await request.json()
-    except json.JSONDecodeError:
-        return web.json_response({"error": "bad_request"}, status=400)
-
-    user = verify_init_data(body.get("init_data", ""))
-    if not user:
-        return web.json_response({"error": "invalid_init_data"}, status=401)
-    if not is_admin(user["id"]):
-        return web.json_response({"error": "not_admin"}, status=403)
-
-    await db.set_broadcast_schedule_file(None, None, user["id"])
     return web.json_response({"ok": True})
 
 
@@ -809,7 +699,7 @@ async def aplus_submit_handler(request: web.Request):
         for key in _aplus_field_keys(question_count)
         if answers_equivalent(correct_answers.get(key), submitted_answers.get(key))
     )
-    score = round(raw_score * LATE_SUBMISSION_SCORE_RATIO) if is_late else raw_score
+    score = raw_score * LATE_SUBMISSION_SCORE_RATIO if is_late else raw_score
 
     await db.save_aplus_submission(test["id"], user["id"], submitted_answers, score)
 
@@ -902,10 +792,6 @@ def create_app() -> web.Application:
     app.router.add_post("/api/test/{code}/submit", submit_test_handler)
     app.router.add_get("/api/rating", rating_handler)
     app.router.add_get("/api/my_results", my_results_handler)
-    app.router.add_get("/api/broadcast_schedule", get_broadcast_schedule_handler)
-    app.router.add_post("/api/broadcast_schedule", save_broadcast_schedule_handler)
-    app.router.add_post("/api/broadcast_schedule/file", upload_broadcast_file_handler)
-    app.router.add_post("/api/broadcast_schedule/file/remove", remove_broadcast_file_handler)
     app.router.add_get("/api/report_schedule", get_report_schedule_handler)
     app.router.add_post("/api/report_schedule", save_report_schedule_handler)
     app.router.add_post("/api/aplus/create_test", aplus_create_test_handler)

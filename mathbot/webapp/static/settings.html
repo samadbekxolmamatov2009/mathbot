@@ -49,61 +49,6 @@
 
     <div class="settings-status" id="reportStatusLine"></div>
 
-    <hr class="settings-divider" />
-
-    <div class="header">
-      <h1>📢 Rejalashtirilgan xabar</h1>
-      <p>Belgilangan kun va vaqtda xabar (matn va/yoki fayl) avtomatik ravishda kanalga yuboriladi.</p>
-    </div>
-
-    <div class="time-field">
-      <div class="settings-row">
-        <label class="settings-label" for="enabledToggle">Faollashtirish</label>
-        <label class="switch">
-          <input type="checkbox" id="enabledToggle" checked />
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="time-field">
-      <label for="messageText">Xabar matni</label>
-      <textarea id="messageText" rows="5" placeholder="Masalan: Assalomu alaykum! Bugun soat 18:00 da darsimiz bo'ladi."></textarea>
-    </div>
-
-    <div class="time-field">
-      <label>Qaysi kuni</label>
-      <div class="day-picker" id="dayPicker">
-        <button type="button" class="day-btn" data-day="0">Dush</button>
-        <button type="button" class="day-btn" data-day="1">Sesh</button>
-        <button type="button" class="day-btn" data-day="2">Chor</button>
-        <button type="button" class="day-btn" data-day="3">Pay</button>
-        <button type="button" class="day-btn" data-day="4">Juma</button>
-        <button type="button" class="day-btn" data-day="5">Shan</button>
-        <button type="button" class="day-btn" data-day="6">Yak</button>
-      </div>
-    </div>
-
-    <div class="time-field">
-      <label>Soat</label>
-      <div class="time-picker">
-        <select id="hourSelect"></select>
-        <span class="time-sep">:</span>
-        <select id="minuteSelect"></select>
-      </div>
-    </div>
-
-    <div class="time-field">
-      <label>Fayl (PDF va h.k.) — ixtiyoriy</label>
-      <div class="settings-row">
-        <span id="fileNameLabel">Biriktirilmagan</span>
-        <button type="button" id="removeFileBtn" style="display:none">❌</button>
-      </div>
-      <input type="file" id="fileInput" accept="application/pdf,image/*" />
-    </div>
-
-    <div class="settings-status" id="statusLine"></div>
-
     <button type="button" id="saveBtn" class="save-btn">💾 Saqlash</button>
   </div>
 
@@ -113,6 +58,6 @@
     </div>
   </div>
 
-  <script src="/settings.js?v=2"></script>
+  <script src="/settings.js?v=3"></script>
 </body>
 </html>

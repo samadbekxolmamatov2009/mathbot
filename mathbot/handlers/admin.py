@@ -120,7 +120,7 @@ async def cmd_help(message: Message):
         "🗂 Mening A+ testlarim — yaratilgan A+ testlar ro'yxati\n"
         "📋 Maxsus topshiriq yaratish — o'quvchilar rasm/PDF yuboradigan topshiriq\n"
         "📢 Xabar yuborish — barcha o'quvchilarga darhol xabar (matn/rasm/fayl)\n"
-        "⚙️ Sozlamalar — haftalik hisobot va rejalashtirilgan xabar vaqtini sozlash\n"
+        "⚙️ Sozlamalar — haftalik hisobot vaqtini sozlash\n"
         "/get_sticker_id — botga stiker yuborib, uning file_id'sini olish\n\n"
         "ℹ️ Eslatma: yangi test/A+/maxsus topshiriq faollashtirilganda, barcha "
         "ro'yxatdan o'tgan o'quvchilarga avtomatik xabar boradi."
@@ -406,7 +406,7 @@ async def open_settings_app(message: Message):
         ]
     )
     await message.answer(
-        "Avtomatik xabar rejasini shu yerdan sozlashingiz mumkin — "
-        "qaysi kuni, qaysi vaqtda, qanday xabar kanalga yuborilishini belgilang:",
+        "Haftalik hisobot rejasini shu yerdan sozlashingiz mumkin — "
+        "qaysi kuni, qaysi vaqtda PDF hisobot kanalga yuborilishini belgilang:",
         reply_markup=kb,
     )

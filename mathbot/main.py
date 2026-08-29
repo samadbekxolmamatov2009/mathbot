@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import logging
 import os
 import tempfile
@@ -8,7 +7,7 @@ from datetime import datetime, timedelta
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BufferedInputFile, FSInputFile
+from aiogram.types import FSInputFile
 from aiohttp import web
 
 import config
@@ -48,7 +47,6 @@ from webapp.server import create_app
 
 REPORT_PATH = os.path.join(tempfile.gettempdir(), "mathbot_haftalik_hisobot.pdf")
 TEST_REPORT_CHECK_INTERVAL = 60
-BROADCAST_CHECK_INTERVAL = 30
 REPORT_SCHEDULE_CHECK_INTERVAL = 30
 NOTIFY_CHECK_INTERVAL = 20
 
@@ -199,42 +197,6 @@ async def notify_new_activities_loop(bot: Bot):
         await asyncio.sleep(NOTIFY_CHECK_INTERVAL)
 
 
-async def send_broadcast_schedule_loop(bot: Bot):
-    """Rejalashtirilgan xabarni belgilangan kun/vaqtda kanalga yuboradi
-    (har bir foydalanuvchiga alohida emas - "⚙️ Sozlamalar" orqali admin
-    belgilagan kun/vaqtda, biriktirilgan fayl (masalan PDF) bo'lsa hujjat
-    sifatida, bo'lmasa oddiy matn sifatida, sozlamalardagi kanalga)."""
-    while True:
-        try:
-            schedule = await db.get_broadcast_schedule()
-            if schedule and schedule["enabled"]:
-                now = now_tashkent()
-                current_week = now.strftime("%G-W%V")
-                if (
-                    now.weekday() == schedule["day_of_week"]
-                    and now.strftime("%H:%M") == schedule["time_of_day"]
-                    and schedule["last_sent_week"] != current_week
-                ):
-                    channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
-                    try:
-                        file_data = schedule["file_data"]
-                        if file_data:
-                            file_bytes = base64.b64decode(file_data)
-                            file_name = schedule["file_name"] or "fayl.pdf"
-                            document = BufferedInputFile(file_bytes, filename=file_name)
-                            await bot.send_document(
-                                channel, document, caption=(schedule["message"] or None)
-                            )
-                        else:
-                            await bot.send_message(channel, schedule["message"])
-                    except Exception:
-                        logging.exception("Rejalashtirilgan xabarni kanalga yuborishda xatolik")
-                    await db.mark_broadcast_sent(current_week)
-        except Exception:
-            logging.exception("Rejalashtirilgan xabarni yuborishda xatolik yuz berdi")
-        await asyncio.sleep(BROADCAST_CHECK_INTERVAL)
-
-
 async def start_webapp_server():
     """Test Mini App uchun aiohttp serverni fon rejimida ishga tushiradi."""
     app = create_app()
@@ -281,7 +243,6 @@ async def main():
     asyncio.create_task(send_report_schedule_loop(bot))
     asyncio.create_task(send_test_results_loop(bot))
     asyncio.create_task(send_aplus_results_loop(bot))
-    asyncio.create_task(send_broadcast_schedule_loop(bot))
     asyncio.create_task(notify_new_activities_loop(bot))
     await dp.start_polling(bot)
 
