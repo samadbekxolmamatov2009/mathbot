@@ -3,7 +3,7 @@ import base64
 import logging
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import aiohttp
 from aiogram import Bot, Dispatcher
@@ -17,7 +17,6 @@ from config import (
     BOSS_IDS,
     BOT_TOKEN,
     REPORT_CHANNEL,
-    REPORT_INTERVAL_SECONDS,
     WEBAPP_HOST,
     WEBAPP_PORT,
     WEBAPP_URL,
@@ -42,30 +41,63 @@ async def keep_webapp_alive_loop():
 import database as db
 from database import init_db
 from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
-from pdf_report import generate_weekly_report, generate_test_results_report
+from pdf_report import generate_period_report, generate_test_results_report
 from quiz_structure import DEFAULT_TOTAL_QUESTIONS
+from timezone_utils import now_tashkent
 from webapp.server import create_app
 
 REPORT_PATH = os.path.join(tempfile.gettempdir(), "mathbot_haftalik_hisobot.pdf")
 TEST_REPORT_CHECK_INTERVAL = 60
 BROADCAST_CHECK_INTERVAL = 30
+REPORT_SCHEDULE_CHECK_INTERVAL = 30
+NOTIFY_CHECK_INTERVAL = 20
+
+DIRECTION_LABELS = {
+    "oddiy": "📘 Oddiy test",
+    "aplus": "🌟 A+ test",
+    "maxsus": "📋 Maxsus topshiriq",
+}
 
 
-async def send_weekly_report_loop(bot: Bot):
-    """Har REPORT_INTERVAL_SECONDS soniyada hisobot PDF faylini yuborishga
-    urinadi - lekin FAQAT "⚙️ Sozlamalar" orqali "Avtomatik soatlik hisobot"
-    yoqilgan bo'lsa (standart holatda o'chirilgan, chunki bu keraksiz
-    ma'lumot bilan kanalni to'ldirib yuborardi)."""
+async def send_report_schedule_loop(bot: Bot):
+    """Haftalik hisobot PDF'ini "⚙️ Sozlamalar"da (Boss/admin tomonidan)
+    belgilangan kun/vaqtda, real test natijalari asosida hisoblab, kanalga
+    yuboradi. Har soatda emas - faqat belgilangan kun/vaqtda, va faqat
+    oldingi hisobotdan keyin topshirilgan natijalarni hisobga oladi."""
     while True:
         try:
-            hourly_enabled = await db.get_setting("hourly_report_enabled", "0")
-            if hourly_enabled == "1":
-                channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
-                generate_weekly_report(REPORT_PATH)
-                await bot.send_document(channel, FSInputFile(REPORT_PATH))
+            schedule = await db.get_report_schedule()
+            if schedule and schedule["enabled"]:
+                now = now_tashkent()
+                current_week = now.strftime("%G-W%V")
+                last_sent_at = schedule["last_sent_at"]
+                last_sent_week = (
+                    datetime.fromisoformat(last_sent_at).strftime("%G-W%V")
+                    if last_sent_at
+                    else None
+                )
+                if (
+                    now.weekday() == schedule["day_of_week"]
+                    and now.strftime("%H:%M") == schedule["time_of_day"]
+                    and last_sent_week != current_week
+                ):
+                    try:
+                        since_iso = last_sent_at or ""
+                        since_dt = (
+                            datetime.fromisoformat(last_sent_at)
+                            if last_sent_at
+                            else now - timedelta(days=7)
+                        )
+                        rows = await db.get_submissions_since(since_iso)
+                        generate_period_report(REPORT_PATH, rows, since_dt, now)
+                        channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
+                        await bot.send_document(channel, FSInputFile(REPORT_PATH))
+                        await db.mark_report_sent(now.strftime("%Y-%m-%dT%H:%M:%S"))
+                    except Exception:
+                        logging.exception("Haftalik hisobotni kanalga yuborishda xatolik yuz berdi")
         except Exception:
-            logging.exception("Haftalik hisobotni kanalga yuborishda xatolik yuz berdi")
-        await asyncio.sleep(REPORT_INTERVAL_SECONDS)
+            logging.exception("Haftalik hisobot rejasini tekshirishda xatolik")
+        await asyncio.sleep(REPORT_SCHEDULE_CHECK_INTERVAL)
 
 
 async def send_test_results_loop(bot: Bot):
@@ -118,6 +150,55 @@ async def send_aplus_results_loop(bot: Bot):
         await asyncio.sleep(TEST_REPORT_CHECK_INTERVAL)
 
 
+async def notify_new_activities_loop(bot: Bot):
+    """Admin/Boss yangi A+ test, oddiy test yoki maxsus topshiriq
+    faollashtirsa - barcha ro'yxatdan o'tgan o'quvchilarga avtomatik xabar
+    yuboradi ("yana bir mavzu faollashtirildi" + yo'nalishi + eslatma)."""
+    while True:
+        try:
+            users = None  # faqat kerak bo'lganda (kamida bitta yangi mavzu bo'lsa) yuklanadi
+
+            async def _broadcast(text: str):
+                nonlocal users
+                if users is None:
+                    users = await db.get_all_users()
+                for u in users:
+                    try:
+                        await bot.send_message(u["telegram_id"], text, parse_mode="HTML")
+                    except Exception:
+                        pass
+                    await asyncio.sleep(0.05)
+
+            for test in await db.get_unnotified_tests():
+                name = test["name"] or test["code"]
+                await _broadcast(
+                    f"🆕 Yana bir mavzu faollashtirildi!\n"
+                    f"{DIRECTION_LABELS['oddiy']}: <b>{name}</b>\n\n"
+                    f"✍️ Vazifangizni yuboring!"
+                )
+                await db.mark_test_notified(test["id"])
+
+            for test in await db.get_unnotified_aplus_tests():
+                name = test["name"] or test["code"]
+                await _broadcast(
+                    f"🆕 Yana bir mavzu faollashtirildi!\n"
+                    f"{DIRECTION_LABELS['aplus']}: <b>{name}</b>\n\n"
+                    f"✍️ Vazifangizni yuboring!"
+                )
+                await db.mark_aplus_test_notified(test["id"])
+
+            for task in await db.get_unnotified_special_tasks():
+                await _broadcast(
+                    f"🆕 Yana bir mavzu faollashtirildi!\n"
+                    f"{DIRECTION_LABELS['maxsus']}: <b>{task['name']}</b>\n\n"
+                    f"✍️ Vazifangizni yuboring!"
+                )
+                await db.mark_special_task_notified(task["id"])
+        except Exception:
+            logging.exception("Yangi mavzu haqida xabar berishda xatolik")
+        await asyncio.sleep(NOTIFY_CHECK_INTERVAL)
+
+
 async def send_broadcast_schedule_loop(bot: Bot):
     """Rejalashtirilgan xabarni belgilangan kun/vaqtda kanalga yuboradi
     (har bir foydalanuvchiga alohida emas - "⚙️ Sozlamalar" orqali admin
@@ -127,7 +208,7 @@ async def send_broadcast_schedule_loop(bot: Bot):
         try:
             schedule = await db.get_broadcast_schedule()
             if schedule and schedule["enabled"]:
-                now = datetime.now()
+                now = now_tashkent()
                 current_week = now.strftime("%G-W%V")
                 if (
                     now.weekday() == schedule["day_of_week"]
@@ -197,10 +278,11 @@ async def main():
 
     await start_webapp_server()
     asyncio.create_task(keep_webapp_alive_loop())
-    asyncio.create_task(send_weekly_report_loop(bot))
+    asyncio.create_task(send_report_schedule_loop(bot))
     asyncio.create_task(send_test_results_loop(bot))
     asyncio.create_task(send_aplus_results_loop(bot))
     asyncio.create_task(send_broadcast_schedule_loop(bot))
+    asyncio.create_task(notify_new_activities_loop(bot))
     await dp.start_polling(bot)
 
 
