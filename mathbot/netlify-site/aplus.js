@@ -28,6 +28,7 @@ const els = {
   infoIcon: document.getElementById("infoIcon"),
   infoText: document.getElementById("infoText"),
   testNameLabel: document.getElementById("testNameLabel"),
+  lateWarning: document.getElementById("lateWarning"),
   questionList: document.getElementById("questionList"),
   progressTrack: document.getElementById("progressTrack"),
   progressFill: document.getElementById("progressFill"),
@@ -63,6 +64,10 @@ function showTestName(name) {
     els.testNameLabel.textContent = name;
     els.testNameLabel.hidden = false;
   }
+}
+
+function showLateWarning() {
+  els.lateWarning.hidden = false;
 }
 
 function showInfo(icon, text) {
@@ -145,12 +150,13 @@ function formatDateTime(value) {
   return `${day}.${month}.${year} ${timePart}`;
 }
 
-function renderResult(score, total, details) {
+function renderResult(score, total, details, late) {
   mathKeyboard.hide();
   els.progressTrack.hidden = true;
   els.progressLabel.hidden = true;
   els.questionList.hidden = true;
   els.submitBar.hidden = true;
+  els.lateWarning.hidden = true;
   if (isTelegram) tg.MainButton.hide();
 
   const pct = total ? Math.round((score / total) * 100) : 0;
@@ -159,6 +165,13 @@ function renderResult(score, total, details) {
   els.scoreTotal.textContent = `/ ${total}`;
 
   els.resultList.innerHTML = "";
+
+  if (late) {
+    const note = document.createElement("div");
+    note.className = "late-warning";
+    note.textContent = "⏰ Kech topshirilgani uchun ball 75% ga qisqartirildi.";
+    els.resultList.appendChild(note);
+  }
   details.forEach((d) => {
     const row = document.createElement("div");
     row.className = `result-row ${d.is_correct ? "correct" : "wrong"}`;
@@ -203,15 +216,13 @@ async function submitTest() {
       const message =
         result.error === "not_started"
           ? "Test hali boshlanmagan."
-          : result.error === "ended"
-          ? "Test vaqti tugagan."
           : "Xatolik yuz berdi. Qaytadan urinib ko'ring.";
       if (isTelegram) tg.showAlert(message);
       else alert(message);
       return;
     }
 
-    renderResult(result.score, result.total, result.details);
+    renderResult(result.score, result.total, result.details, result.late);
   } catch (e) {
     if (isTelegram) tg.MainButton.hideProgress();
     els.submitBtn.disabled = false;
@@ -263,8 +274,7 @@ async function init() {
     }
 
     if (data.window_status === "ended") {
-      showInfo("🔒", "Test vaqti tugagan.");
-      return;
+      showLateWarning();
     }
 
     fields = data.fields || [];
