@@ -1,6 +1,5 @@
 import json
 import time
-from datetime import datetime
 
 from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
@@ -13,6 +12,7 @@ from aiogram.types import (
 )
 
 import database as db
+from timezone_utils import now_tashkent_str
 from config import WEBAPP_URL, TEST_WEBAPP_URL, is_admin
 from states import TestCode
 from keyboards import admin_menu_keyboard, NAV_BUTTON_TEXTS
@@ -106,7 +106,7 @@ async def handle_web_app_data(message: Message):
 def _test_status_label(test) -> str:
     if not test["is_active"]:
         return "🗑 Bekor qilingan"
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    now = now_tashkent_str()
     if now < test["start_time"]:
         return "⏳ Kutilmoqda"
     if now > test["end_time"]:
