@@ -78,13 +78,142 @@ def _wrap_text(c: canvas.Canvas, text: str, font: str, size: int, max_width: flo
     return lines
 
 
+def generate_period_report(
+    output_path: str,
+    rows,
+    since: datetime,
+    until: datetime = None,
+    group: str = "Turbo 4.0 Muhokama",
+    course: str = "Turbo 4.0 MS",
+) -> str:
+    """Berilgan davr ichida (since - until) topshirilgan test/A+ natijalari
+    asosida haqiqiy "Haftalik hisobot" PDF yaratadi.
+
+    rows: database.get_submissions_since() natijasi - har biri (kind,
+    test_id, test_name, telegram_id, full_name, score, max_score,
+    submitted_at) maydonlariga ega. Har bir noyob test_name bitta "mavzu"
+    ustuni bo'ladi (nechta mavzu bo'lsa - shuncha ustun, statik emas).
+    """
+    until = until or datetime.now()
+    date_str = until.strftime("%d.%m.%Y")
+    period = f"{since.strftime('%d.%m.%Y')} — {until.strftime('%d.%m.%Y')}"
+
+    # Mavzularni (testlarni) birinchi paydo bo'lish tartibida yig'amiz.
+    topic_order: list[str] = []
+    for r in rows:
+        if r["test_name"] not in topic_order:
+            topic_order.append(r["test_name"])
+
+    # Talaba -> {mavzu_nomi: ball}
+    students: dict[int, dict] = {}
+    for r in rows:
+        tid = r["telegram_id"]
+        if tid not in students:
+            students[tid] = {"name": r["full_name"] or f"ID {tid}", "scores": {}}
+        # Bir talaba bitta mavzuni faqat bir marta topshiradi (UNIQUE
+        # constraint), shuning uchun to'g'ridan-to'g'ri yozib qo'yamiz.
+        students[tid]["scores"][r["test_name"]] = r["score"]
+
+    if not topic_order or not students:
+        # Ma'lumot yo'q bo'lsa ham, bo'sh (lekin tushunarli) PDF chiqaramiz.
+        topic_order = topic_order or ["Mavzu yo'q"]
+
+    rows_out = []
+    for tid, data in students.items():
+        scores = [data["scores"].get(topic) for topic in topic_order]
+        total = sum(s for s in scores if s is not None)
+        rows_out.append((data["name"], scores, total))
+    rows_out.sort(key=lambda r: -r[2])
+
+    columns = [("Talaba", "horizontal")] + [(t, "vertical") for t in topic_order] + [("Jami ball", "horizontal")]
+
+    page_w, page_h = landscape(A4)
+    margin = 30
+    table_w = page_w - 2 * margin
+    name_w = table_w * 0.30
+    total_w = table_w * 0.12
+    other_count = len(topic_order)
+    other_w = (table_w - name_w - total_w) / max(other_count, 1)
+    col_widths = [name_w] + [other_w] * other_count + [total_w]
+
+    header_h = 100
+    row_h = 16
+    title_h = 26
+
+    table_top = page_h - margin - title_h - 20
+    table_left = margin
+
+    c = canvas.Canvas(output_path, pagesize=landscape(A4))
+    c.setStrokeColor(BORDER)
+
+    c.setFillColor(TITLE_COLOR)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(page_w / 2, page_h - margin - 14, "HAFTALIK HISOBOT")
+
+    c.setFillColor(SUBTITLE_COLOR)
+    c.setFont("Helvetica", 9)
+    subtitle = f"Guruh: {group} | Kurs: {course} | Davr: {period} | Sana: {date_str}"
+    c.drawCentredString(page_w / 2, page_h - margin - title_h, subtitle)
+
+    y = table_top
+    x = table_left
+    for (label, orientation), w in zip(columns, col_widths):
+        c.setFillColor(HEADER_GREEN if label == "Jami ball" else HEADER_BLUE)
+        c.rect(x, y - header_h, w, header_h, fill=1, stroke=1)
+
+        c.setFillColor(colors.white)
+        if orientation == "horizontal":
+            c.setFont("Helvetica-Bold", 8)
+            lines = _wrap_text(c, label, "Helvetica-Bold", 8, w - 10)
+            total_h = len(lines) * 10
+            start_y = y - header_h / 2 + total_h / 2 - 8
+            for i, line in enumerate(lines):
+                c.drawCentredString(x + w / 2, start_y - i * 10, line)
+        else:
+            c.setFont("Helvetica-Bold", 7)
+            c.saveState()
+            c.translate(x + w / 2, y - header_h / 2)
+            c.rotate(90)
+            c.drawCentredString(0, 0, label[:40])
+            c.restoreState()
+        x += w
+
+    y = table_top - header_h
+    for idx, (name, scores, total) in enumerate(rows_out):
+        band = ROW_ALT if idx % 2 == 0 else ROW_WHITE
+        x = table_left
+        values = [name] + [("-" if s is None else str(s)) for s in scores] + [str(total)]
+        for col_idx, (w, value) in enumerate(zip(col_widths, values)):
+            c.setFillColor(band)
+            c.rect(x, y - row_h, w, row_h, fill=1, stroke=1)
+            c.setFillColor(TEXT_DARK)
+            c.setFont("Helvetica", 8)
+            if col_idx == 0:
+                c.drawString(x + 6, y - row_h + 5, value[:45])
+            else:
+                c.drawCentredString(x + w / 2, y - row_h + 5, value)
+            x += w
+        y -= row_h
+
+        if y - row_h < margin:
+            c.showPage()
+            c.setStrokeColor(BORDER)
+            y = page_h - margin
+
+    c.showPage()
+    c.save()
+    return output_path
+
+
 def generate_weekly_report(
     output_path: str,
     group: str = "Turbo 4.0 Muhokama",
     course: str = "Turbo 4.0 MS",
     generated_at: datetime = None,
 ) -> str:
-    """Rasmdagi 'Haftalik hisobot' jadvaliga o'xshash PDF fayl yaratadi va saqlaydi."""
+    """ESKI (namuna ma'lumotli) hisobot - endi ishlatilmaydi, faqat orqaga
+    moslik uchun saqlangan. Haqiqiy hisobot uchun generate_period_report()
+    ishlatiladi (main.py'dagi report_schedule loop shuni chaqiradi)."""
     generated_at = generated_at or datetime.now()
     period = f"{MONTHS_UZ[generated_at.month - 1]} {generated_at.year}"
     date_str = generated_at.strftime("%d.%m.%Y")
