@@ -265,6 +265,35 @@ body {
   font-weight: 600;
 }
 
+.settings-divider {
+  margin: 24px 16px;
+  border: none;
+  border-top: 1px solid var(--border, #d9e2ec);
+}
+
+.save-btn {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 20px 16px 24px;
+  padding: 14px;
+  border: none;
+  border-radius: 12px;
+  background: var(--accent, #3d6ea5);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.save-btn:active {
+  opacity: 0.85;
+}
+
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .day-picker {
   display: flex;
   gap: 6px;
