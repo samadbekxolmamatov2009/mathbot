@@ -9,9 +9,51 @@
 </head>
 <body>
   <div id="formState">
+
     <div class="header">
-      <h1>⚙️ Haftalik xabar rejasi</h1>
-      <p>Belgilangan kun va vaqtda xabar avtomatik ravishda kanalga yuboriladi.</p>
+      <h1>📊 Haftalik hisobot</h1>
+      <p>Belgilangan kun/vaqtda, oxirgi hisobotdan keyin topshirilgan barcha test natijalari asosida PDF avtomatik kanalga yuboriladi.</p>
+    </div>
+
+    <div class="time-field">
+      <div class="settings-row">
+        <label class="settings-label" for="reportEnabledToggle">Faollashtirish</label>
+        <label class="switch">
+          <input type="checkbox" id="reportEnabledToggle" />
+          <span class="switch-slider"></span>
+        </label>
+      </div>
+    </div>
+
+    <div class="time-field">
+      <label>Qaysi kuni</label>
+      <div class="day-picker" id="reportDayPicker">
+        <button type="button" class="day-btn" data-day="0">Dush</button>
+        <button type="button" class="day-btn" data-day="1">Sesh</button>
+        <button type="button" class="day-btn" data-day="2">Chor</button>
+        <button type="button" class="day-btn" data-day="3">Pay</button>
+        <button type="button" class="day-btn" data-day="4">Juma</button>
+        <button type="button" class="day-btn" data-day="5">Shan</button>
+        <button type="button" class="day-btn" data-day="6">Yak</button>
+      </div>
+    </div>
+
+    <div class="time-field">
+      <label>Soat</label>
+      <div class="time-picker">
+        <select id="reportHourSelect"></select>
+        <span class="time-sep">:</span>
+        <select id="reportMinuteSelect"></select>
+      </div>
+    </div>
+
+    <div class="settings-status" id="reportStatusLine"></div>
+
+    <hr class="settings-divider" />
+
+    <div class="header">
+      <h1>📢 Rejalashtirilgan xabar</h1>
+      <p>Belgilangan kun va vaqtda xabar (matn va/yoki fayl) avtomatik ravishda kanalga yuboriladi.</p>
     </div>
 
     <div class="time-field">
@@ -51,7 +93,18 @@
       </div>
     </div>
 
+    <div class="time-field">
+      <label>Fayl (PDF va h.k.) — ixtiyoriy</label>
+      <div class="settings-row">
+        <span id="fileNameLabel">Biriktirilmagan</span>
+        <button type="button" id="removeFileBtn" style="display:none">❌</button>
+      </div>
+      <input type="file" id="fileInput" accept="application/pdf,image/*" />
+    </div>
+
     <div class="settings-status" id="statusLine"></div>
+
+    <button type="button" id="saveBtn" class="save-btn">💾 Saqlash</button>
   </div>
 
   <div id="successState" style="display:none">
@@ -60,6 +113,6 @@
     </div>
   </div>
 
-  <script src="/settings.js?v=1"></script>
+  <script src="/settings.js?v=2"></script>
 </body>
 </html>
