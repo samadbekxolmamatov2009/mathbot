@@ -6,6 +6,7 @@ from datetime import datetime
 # bir xil interfeys bergani uchun pastdagi SQL so'rovlarning birortasi
 # ham o'zgartirilishi shart emas.
 import db_backend as aiosqlite
+from timezone_utils import now_tashkent_str
 from config import DB_PATH
 
 
@@ -140,6 +141,17 @@ async def init_db():
             )
         """)
         await db.execute("""
+            CREATE TABLE IF NOT EXISTS report_schedule (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                day_of_week INTEGER NOT NULL DEFAULT 0,
+                time_of_day TEXT NOT NULL DEFAULT '09:00',
+                enabled INTEGER NOT NULL DEFAULT 0,
+                last_sent_at TEXT,
+                updated_by INTEGER,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
+        await db.execute("""
             CREATE TABLE IF NOT EXISTS admins (
                 telegram_id INTEGER PRIMARY KEY,
                 added_at TEXT DEFAULT (datetime('now'))
@@ -169,6 +181,9 @@ async def init_db():
         for column_sql in (
             "ALTER TABLE broadcast_schedule ADD COLUMN file_data TEXT",
             "ALTER TABLE broadcast_schedule ADD COLUMN file_name TEXT",
+            "ALTER TABLE tests ADD COLUMN notified INTEGER DEFAULT 0",
+            "ALTER TABLE aplus_tests ADD COLUMN notified INTEGER DEFAULT 0",
+            "ALTER TABLE special_tasks ADD COLUMN notified INTEGER DEFAULT 0",
         ):
             try:
                 await db.execute(column_sql)
@@ -643,7 +658,7 @@ async def delete_test(test_id: int) -> bool:
 
 
 async def get_tests_pending_report():
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    now = now_tashkent_str()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -791,7 +806,7 @@ async def delete_aplus_test(test_id: int) -> bool:
 
 
 async def get_aplus_tests_pending_report():
-    now = datetime.now().strftime("%Y-%m-%dT%H:%M")
+    now = now_tashkent_str()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -1017,4 +1032,116 @@ async def set_broadcast_schedule_file(file_data: str | None, file_name: str | No
                    updated_at = excluded.updated_at""",
             (updated_by, file_data, file_name),
         )
+        await db.commit()
+
+
+# ---------- Haftalik hisobot rejasi (haqiqiy test natijalari asosida) ----------
+
+async def get_report_schedule():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM report_schedule WHERE id = 1"
+        ) as cursor:
+            return await cursor.fetchone()
+
+
+async def save_report_schedule(day_of_week: int, time_of_day: str, enabled: bool, updated_by: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO report_schedule
+                   (id, day_of_week, time_of_day, enabled, updated_by, updated_at)
+               VALUES (1, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(id) DO UPDATE SET
+                   day_of_week = excluded.day_of_week,
+                   time_of_day = excluded.time_of_day,
+                   enabled = excluded.enabled,
+                   updated_by = excluded.updated_by,
+                   updated_at = excluded.updated_at""",
+            (day_of_week, time_of_day, int(enabled), updated_by),
+        )
+        await db.commit()
+
+
+async def mark_report_sent(sent_at_iso: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE report_schedule SET last_sent_at = ? WHERE id = 1", (sent_at_iso,)
+        )
+        await db.commit()
+
+
+async def get_submissions_since(since_iso: str):
+    """Berilgan vaqtdan keyin topshirilgan BARCHA natijalarni (oddiy test +
+    A+ test) birlashtirib qaytaradi - har biri qaysi "mavzu"ga (testga)
+    tegishli ekani va kimning natijasi ekani bilan birga. Haftalik hisobot
+    PDF'ini shundan yig'iladi."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT 'oddiy' AS kind, t.id AS test_id, COALESCE(t.name, t.code) AS test_name,
+                      t.created_at AS test_created_at, ts.telegram_id, u.full_name,
+                      ts.score, t.total_questions AS max_score, ts.submitted_at
+               FROM test_submissions ts
+               JOIN tests t ON t.id = ts.test_id
+               LEFT JOIN users u ON u.telegram_id = ts.telegram_id
+               WHERE ts.submitted_at > ?
+               UNION ALL
+               SELECT 'aplus' AS kind, at.id AS test_id, COALESCE(at.name, at.code) AS test_name,
+                      at.created_at AS test_created_at, aps.telegram_id, u.full_name,
+                      aps.score, at.question_count * 2 AS max_score, aps.submitted_at
+               FROM aplus_submissions aps
+               JOIN aplus_tests at ON at.id = aps.test_id
+               LEFT JOIN users u ON u.telegram_id = aps.telegram_id
+               WHERE aps.submitted_at > ?
+               ORDER BY test_created_at, submitted_at""",
+            (since_iso, since_iso),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+# ---------- Yangi faollashtirilgan mavzular haqida xabar berish ----------
+
+async def get_unnotified_tests():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM tests WHERE is_active = 1 AND (notified IS NULL OR notified = 0)"
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def mark_test_notified(test_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE tests SET notified = 1 WHERE id = ?", (test_id,))
+        await db.commit()
+
+
+async def get_unnotified_aplus_tests():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM aplus_tests WHERE is_active = 1 AND (notified IS NULL OR notified = 0)"
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def mark_aplus_test_notified(test_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE aplus_tests SET notified = 1 WHERE id = ?", (test_id,))
+        await db.commit()
+
+
+async def get_unnotified_special_tasks():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM special_tasks WHERE is_active = 1 AND (notified IS NULL OR notified = 0)"
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def mark_special_task_notified(task_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE special_tasks SET notified = 1 WHERE id = ?", (task_id,))
         await db.commit()
