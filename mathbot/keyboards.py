@@ -164,6 +164,14 @@ def boss_menu_keyboard():
     )
 
 
+def special_task_collecting_keyboard():
+    from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="✅ Maxsus topshiriqni tugatish")]],
+        resize_keyboard=True,
+    )
+
+
 def main_menu_keyboard():
     from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
     return ReplyKeyboardMarkup(
@@ -189,4 +197,3 @@ def main_menu_keyboard():
         ],
         resize_keyboard=True,
     )
-    
