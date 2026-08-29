@@ -10,7 +10,7 @@ from aiogram.types import Message
 import database as db
 from config import ADMIN_IDS, BOSS_IDS, COURSES, is_admin
 from states import SpecialTaskAdmin
-from keyboards import NAV_BUTTON_TEXTS
+from keyboards import NAV_BUTTON_TEXTS, main_menu_keyboard, special_task_collecting_keyboard
 
 router = Router()
 router.message.filter(F.chat.type == "private")
@@ -84,7 +84,11 @@ async def _auto_flush_after_delay(bot, telegram_id: int):
     sent = await _flush_submission(bot, telegram_id)
     if sent:
         try:
-            await bot.send_message(telegram_id, f"✅ {sent} ta fayl ustozga yuborildi.")
+            await bot.send_message(
+                telegram_id,
+                f"✅ {sent} ta fayl ustozga yuborildi.",
+                reply_markup=main_menu_keyboard(),
+            )
         except Exception:
             pass
 
@@ -148,9 +152,11 @@ async def start_special_task_submission(message: Message, bot):
     await message.answer(
         f"📋 <b>{task['name']}</b>\n\n"
         "Ushbu topshiriq bo'yicha rasm yoki PDF fayl yuboring.\n"
-        "Bir nechta fayl yuborishingiz mumkin — 1 daqiqadan so'ng ular avtomatik ustozga yuboriladi.\n"
-        "(Boshqa tugmani bossangiz, to'plangan fayllar shu zahoti yuboriladi.)",
+        "Bir nechta fayl yuborishingiz mumkin — tugatgach pastdagi \"✅ Maxsus "
+        "topshiriqni tugatish\" tugmasini bosing (yoki 1 daqiqadan so'ng ular "
+        "avtomatik yuboriladi).",
         parse_mode="HTML",
+        reply_markup=special_task_collecting_keyboard(),
     )
 
 
@@ -174,6 +180,20 @@ async def collect_document(message: Message):
     await message.answer(f"✅ Qabul qilindi ({len(session['files'])} ta). Yana yuborishingiz mumkin.")
 
 
+@router.message(IsCollectingSpecialTask(), F.text == "✅ Maxsus topshiriqni tugatish")
+async def finish_special_task_button(message: Message, bot):
+    log.info("FINISH-BUTTON: %s 'Tugatish' tugmasini bosdi", message.from_user.id)
+    sent = await _flush_submission(bot, message.from_user.id)
+    if sent:
+        await message.answer(
+            f"✅ {sent} ta fayl ustozga yuborildi.", reply_markup=main_menu_keyboard()
+        )
+    else:
+        await message.answer(
+            "Hali birorta fayl yuborilmagan edi.", reply_markup=main_menu_keyboard()
+        )
+
+
 @router.message(IsCollectingSpecialTask())
 async def flush_on_other_action(message: Message, bot):
     """Fayl/hujjatdan boshqa har qanday xabar kelsa — to'plangan fayllarni darhol
@@ -181,5 +201,5 @@ async def flush_on_other_action(message: Message, bot):
     log.info("BUTTON-FLUSH: %s boshqa xabar yubordi (text=%r), darhol flush qilinmoqda", message.from_user.id, message.text)
     sent = await _flush_submission(bot, message.from_user.id)
     if sent:
-        await message.answer(f"✅ {sent} ta fayl ustozga yuborildi.")
+        await message.answer(f"✅ {sent} ta fayl ustozga yuborildi.", reply_markup=main_menu_keyboard())
     raise SkipHandler
