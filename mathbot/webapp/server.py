@@ -24,6 +24,7 @@ import database as db
 from answer_check import answers_equivalent
 from config import ALLOWED_ORIGINS, BOT_TOKEN, is_admin
 from quiz_structure import all_questions, options_for, DEFAULT_TOTAL_QUESTIONS
+from timezone_utils import now_tashkent
 
 ADMIN_SYNC_INTERVAL_SECONDS = 60
 
@@ -89,8 +90,10 @@ def _generate_code() -> str:
 
 
 def _now_str() -> str:
-    """datetime-local input formatiga mos joriy vaqt (YYYY-MM-DDTHH:MM)."""
-    return datetime.now().strftime("%Y-%m-%dT%H:%M")
+    """datetime-local input formatiga mos joriy vaqt (YYYY-MM-DDTHH:MM) -
+    O'ZBEKISTON (Toshkent) vaqti bo'yicha, server qayerda joylashganidan
+    qat'iy nazar (qarang: timezone_utils.py)."""
+    return now_tashkent().strftime("%Y-%m-%dT%H:%M")
 
 
 def _build_details(correct_answers: dict, user_answers: dict, total_questions: int):
@@ -283,10 +286,13 @@ async def test_status_handler(request: web.Request):
         "end_time": test["end_time"],
         "already_submitted": already_submitted,
     }
-    if window_status == "active":
+    if window_status in ("active", "ended") and not already_submitted:
         response["questions"] = all_questions(total_questions)
 
     return web.json_response(response)
+
+
+LATE_SUBMISSION_SCORE_RATIO = 0.75
 
 
 async def submit_test_handler(request: web.Request):
@@ -322,18 +328,21 @@ async def submit_test_handler(request: web.Request):
     now = _now_str()
     if now < test["start_time"]:
         return web.json_response({"error": "not_started"}, status=403)
-    if now > test["end_time"]:
-        return web.json_response({"error": "ended"}, status=403)
+
+    # Test vaqti tugagan bo'lsa ham topshirish MUMKIN - lekin kech
+    # topshirgani uchun ball 75% ga qisqartiriladi (talab shunday).
+    is_late = now > test["end_time"]
 
     submitted_answers = body.get("answers", {})
     if not isinstance(submitted_answers, dict):
         submitted_answers = {}
 
-    score = sum(
+    raw_score = sum(
         1
         for q in range(1, total_questions + 1)
         if submitted_answers.get(str(q)) == correct_answers.get(str(q))
     )
+    score = round(raw_score * LATE_SUBMISSION_SCORE_RATIO) if is_late else raw_score
 
     await db.save_test_submission(test["id"], user["id"], submitted_answers, score)
 
@@ -343,6 +352,7 @@ async def submit_test_handler(request: web.Request):
             "total": total_questions,
             "details": _build_details(correct_answers, submitted_answers, total_questions),
             "already_submitted": False,
+            "late": is_late,
         }
     )
 
@@ -406,9 +416,8 @@ async def get_broadcast_schedule_handler(request: web.Request):
         return web.json_response({"error": "not_admin"}, status=403)
 
     schedule = await db.get_broadcast_schedule()
-    hourly_enabled = (await db.get_setting("hourly_report_enabled", "0")) == "1"
     if not schedule:
-        return web.json_response({"schedule": None, "hourly_report_enabled": hourly_enabled})
+        return web.json_response({"schedule": None})
 
     return web.json_response(
         {
@@ -418,8 +427,7 @@ async def get_broadcast_schedule_handler(request: web.Request):
                 "time_of_day": schedule["time_of_day"],
                 "enabled": bool(schedule["enabled"]),
                 "file_name": schedule["file_name"],
-            },
-            "hourly_report_enabled": hourly_enabled,
+            }
         }
     )
 
@@ -436,31 +444,71 @@ async def save_broadcast_schedule_handler(request: web.Request):
     if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
-    if "hourly_report_enabled" in body:
-        await db.set_setting(
-            "hourly_report_enabled", "1" if body.get("hourly_report_enabled") else "0"
-        )
-
     message = (body.get("message") or "").strip()
     day_of_week = body.get("day_of_week")
     time_of_day = body.get("time_of_day") or ""
     enabled = bool(body.get("enabled", True))
 
-    # Xabar/kun/vaqt yuborilmagan bo'lishi mumkin - masalan admin faqat
-    # soatlik hisobot tugmasini bosgan bo'lishi mumkin. Bunday holda
-    # rejalashtirilgan xabarga tegilmaymiz.
-    if message or day_of_week is not None or time_of_day:
-        if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
-            return web.json_response({"error": "invalid_day"}, status=400)
-        if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
-            return web.json_response({"error": "invalid_time"}, status=400)
+    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
+        return web.json_response({"error": "invalid_day"}, status=400)
+    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
+        return web.json_response({"error": "invalid_time"}, status=400)
 
-        existing = await db.get_broadcast_schedule()
-        has_file = bool(existing and existing["file_data"])
-        if not message and not has_file:
-            return web.json_response({"error": "missing_message"}, status=400)
+    existing = await db.get_broadcast_schedule()
+    has_file = bool(existing and existing["file_data"])
+    if not message and not has_file:
+        return web.json_response({"error": "missing_message"}, status=400)
 
-        await db.save_broadcast_schedule(message, day_of_week, time_of_day, enabled, user["id"])
+    await db.save_broadcast_schedule(message, day_of_week, time_of_day, enabled, user["id"])
+
+    return web.json_response({"ok": True})
+
+
+async def get_report_schedule_handler(request: web.Request):
+    user = verify_init_data(request.query.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    schedule = await db.get_report_schedule()
+    if not schedule:
+        return web.json_response({"schedule": None})
+
+    return web.json_response(
+        {
+            "schedule": {
+                "day_of_week": schedule["day_of_week"],
+                "time_of_day": schedule["time_of_day"],
+                "enabled": bool(schedule["enabled"]),
+                "last_sent_at": schedule["last_sent_at"],
+            }
+        }
+    )
+
+
+async def save_report_schedule_handler(request: web.Request):
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    user = verify_init_data(body.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    day_of_week = body.get("day_of_week")
+    time_of_day = body.get("time_of_day") or ""
+    enabled = bool(body.get("enabled", True))
+
+    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
+        return web.json_response({"error": "invalid_day"}, status=400)
+    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
+        return web.json_response({"error": "invalid_time"}, status=400)
+
+    await db.save_report_schedule(day_of_week, time_of_day, enabled, user["id"])
 
     return web.json_response({"ok": True})
 
@@ -707,7 +755,7 @@ async def aplus_test_status_handler(request: web.Request):
         "end_time": test["end_time"],
         "already_submitted": already_submitted,
     }
-    if window_status == "active":
+    if window_status in ("active", "ended") and not already_submitted:
         response["question_count"] = question_count
         response["fields"] = _aplus_field_keys(question_count)
 
@@ -747,18 +795,21 @@ async def aplus_submit_handler(request: web.Request):
     now = _now_str()
     if now < test["start_time"]:
         return web.json_response({"error": "not_started"}, status=403)
-    if now > test["end_time"]:
-        return web.json_response({"error": "ended"}, status=403)
+
+    # Test vaqti tugagan bo'lsa ham topshirish MUMKIN - lekin kech
+    # topshirgani uchun ball 75% ga qisqartiriladi.
+    is_late = now > test["end_time"]
 
     submitted_answers = body.get("answers", {})
     if not isinstance(submitted_answers, dict):
         submitted_answers = {}
 
-    score = sum(
+    raw_score = sum(
         1
         for key in _aplus_field_keys(question_count)
         if answers_equivalent(correct_answers.get(key), submitted_answers.get(key))
     )
+    score = round(raw_score * LATE_SUBMISSION_SCORE_RATIO) if is_late else raw_score
 
     await db.save_aplus_submission(test["id"], user["id"], submitted_answers, score)
 
@@ -768,6 +819,7 @@ async def aplus_submit_handler(request: web.Request):
             "total": question_count * 2,
             "details": _aplus_build_details(correct_answers, submitted_answers, question_count),
             "already_submitted": False,
+            "late": is_late,
         }
     )
 
@@ -854,6 +906,8 @@ def create_app() -> web.Application:
     app.router.add_post("/api/broadcast_schedule", save_broadcast_schedule_handler)
     app.router.add_post("/api/broadcast_schedule/file", upload_broadcast_file_handler)
     app.router.add_post("/api/broadcast_schedule/file/remove", remove_broadcast_file_handler)
+    app.router.add_get("/api/report_schedule", get_report_schedule_handler)
+    app.router.add_post("/api/report_schedule", save_report_schedule_handler)
     app.router.add_post("/api/aplus/create_test", aplus_create_test_handler)
     app.router.add_get("/api/aplus/test_by_id/{id}", aplus_get_edit_data_handler)
     app.router.add_post("/api/aplus/test_by_id/{id}/update", aplus_update_test_handler)
