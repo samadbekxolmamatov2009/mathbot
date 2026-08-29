@@ -106,14 +106,26 @@ async def cmd_get_sticker_id(message: Message):
 async def cmd_help(message: Message):
     if not is_admin(message.from_user.id):
         return
-    await message.answer(
-        "Admin buyruqlari:\n"
+
+    text = (
+        "🛠 <b>Admin buyruqlari</b>\n\n"
         "📊 Statistika — ro'yxatdan o'tganlar statistikasi\n"
         "👥 Foydalanuvchilar — barcha foydalanuvchilar ro'yxati (oxirgi 20 tasi)\n"
-        "🗑 Foydalanuvchini o'chirish — /delete <telegram_id>\n"
-        "👮 Adminlar — adminlar ro'yxati",
-        reply_markup=admin_menu_keyboard(),
+        "🗑 Foydalanuvchini o'chirish — /delete &lt;telegram_id&gt;\n"
+        "👮 Adminlar — adminlar ro'yxati\n"
+        "📅 Davomat — davomat olish/hisobot\n"
+        "📝 Javoblarni yozish — oddiy test yaratish (Mini App orqali)\n"
+        "🗂 Mening testlarim — yaratilgan oddiy testlar ro'yxati\n"
+        "➕ A+ yaratish — A+ test yaratish (Mini App orqali)\n"
+        "🗂 Mening A+ testlarim — yaratilgan A+ testlar ro'yxati\n"
+        "📋 Maxsus topshiriq yaratish — o'quvchilar rasm/PDF yuboradigan topshiriq\n"
+        "📢 Xabar yuborish — barcha o'quvchilarga darhol xabar (matn/rasm/fayl)\n"
+        "⚙️ Sozlamalar — haftalik hisobot va rejalashtirilgan xabar vaqtini sozlash\n"
+        "/get_sticker_id — botga stiker yuborib, uning file_id'sini olish\n\n"
+        "ℹ️ Eslatma: yangi test/A+/maxsus topshiriq faollashtirilganda, barcha "
+        "ro'yxatdan o'tgan o'quvchilarga avtomatik xabar boradi."
     )
+    await message.answer(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
 
 
 @router.message(Command("stats"))
