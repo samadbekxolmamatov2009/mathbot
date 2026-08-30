@@ -4,6 +4,21 @@ if (tg) {
   tg.expand();
 }
 
+window.onerror = function (message, source, lineno, colno, error) {
+  fetch("/api/debug_log", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      page: "settings.js",
+      message: String(message),
+      source,
+      lineno,
+      colno,
+      stack: error && error.stack,
+    }),
+  }).catch(() => {});
+};
+
 const WEEKDAY_NAMES = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"];
 
 function pad(n) {
