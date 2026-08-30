@@ -65,8 +65,15 @@ async def send_report_schedule_loop(bot: Bot):
     while True:
         try:
             schedule = await db.get_report_schedule()
+            now = now_tashkent()
+            logging.info(
+                "Hisobot tekshiruvi: schedule=%s hozir=%s (kun=%s soat=%s)",
+                dict(schedule) if schedule else None,
+                now.strftime("%Y-%m-%d %H:%M:%S"),
+                now.weekday(),
+                now.strftime("%H:%M"),
+            )
             if schedule and schedule["enabled"]:
-                now = now_tashkent()
                 current_week = now.strftime("%G-W%V")
                 last_sent_at = schedule["last_sent_at"]
                 last_sent_week = (
