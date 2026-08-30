@@ -20,6 +20,13 @@ from config import (
     WEBAPP_PORT,
     WEBAPP_URL,
 )
+import database as db
+from database import init_db
+from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
+from pdf_report import generate_period_report, generate_test_results_report
+from quiz_structure import DEFAULT_TOTAL_QUESTIONS
+from timezone_utils import now_tashkent
+from webapp.server import create_app
 
 KEEP_ALIVE_INTERVAL_SECONDS = 600  # 10 daqiqa
 
@@ -37,13 +44,7 @@ async def keep_webapp_alive_loop():
             except Exception:
                 logging.exception("Keep-alive ping muvaffaqiyatsiz")
             await asyncio.sleep(KEEP_ALIVE_INTERVAL_SECONDS)
-import database as db
-from database import init_db
-from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
-from pdf_report import generate_period_report, generate_test_results_report
-from quiz_structure import DEFAULT_TOTAL_QUESTIONS
-from timezone_utils import now_tashkent
-from webapp.server import create_app
+
 
 REPORT_PATH = os.path.join(tempfile.gettempdir(), "mathbot_haftalik_hisobot.pdf")
 TEST_REPORT_CHECK_INTERVAL = 60
@@ -68,7 +69,7 @@ async def send_report_schedule_loop(bot: Bot):
             now = now_tashkent()
             logging.info(
                 "Hisobot tekshiruvi: schedule=%s hozir=%s (kun=%s soat=%s)",
-                dict(schedule) if schedule else None,
+                dict(zip(schedule.keys(), schedule)) if schedule else None,
                 now.strftime("%Y-%m-%d %H:%M:%S"),
                 now.weekday(),
                 now.strftime("%H:%M"),
