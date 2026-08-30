@@ -41,6 +41,7 @@ async def davomat_button(message: Message, state: FSMContext):
             inline_keyboard=[
                 [InlineKeyboardButton(text="🆕 Yangi davomat boshlash", callback_data="attendance_new")],
                 [InlineKeyboardButton(text="📊 Jadvalni ko'rish", callback_data="attendance_matrix")],
+                [InlineKeyboardButton(text="🔄 Davomatni yangilash", callback_data="attendance_reset_ask")],
             ]
         )
         await message.answer("📅 Davomat bo'limi:", reply_markup=kb)
@@ -108,6 +109,49 @@ async def attendance_matrix_callback(callback: CallbackQuery):
     )
 
 
+@router.callback_query(F.data == "attendance_reset_ask")
+async def attendance_reset_ask_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Sizda ruxsat yo'q.", show_alert=True)
+        return
+    await callback.answer()
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Ha, yangilash", callback_data="attendance_reset_confirm"),
+                InlineKeyboardButton(text="❌ Yo'q", callback_data="attendance_reset_no"),
+            ]
+        ]
+    )
+    await callback.message.edit_text(
+        "🔄 Davomat jadvalini yangilamoqchimisiz?\n\n"
+        "Hozirgacha bo'lgan davomat sessiyalari \"📊 Jadvalni ko'rish\" hisobotida "
+        "endi ko'rsatilmaydi — jadval shu paytdan boshlab yangidan boshlanadi "
+        "(PDF fayl vaqt o'tishi bilan haddan tashqari kattalashib ketmasligi uchun).\n\n"
+        "❗️ Bu o'quvchilarning tanga/ball hisobiga ta'sir qilmaydi — faqat "
+        "hisobot jadvalining ko'rinishi qisqaradi.",
+        reply_markup=kb,
+    )
+
+
+@router.callback_query(F.data == "attendance_reset_no")
+async def attendance_reset_no_callback(callback: CallbackQuery):
+    await callback.answer()
+    await callback.message.edit_text("Bekor qilindi.")
+
+
+@router.callback_query(F.data == "attendance_reset_confirm")
+async def attendance_reset_confirm_callback(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Sizda ruxsat yo'q.", show_alert=True)
+        return
+    await callback.answer()
+
+    await db.reset_attendance_matrix()
+    await callback.message.edit_text("✅ Davomat jadvali yangilandi — endi shu paytdan boshlab yuritiladi.")
+
+
 # ---------- Admin: davomat sessiyasini boshlash ----------
 
 async def start_attendance_admin(message: Message, state: FSMContext):
@@ -166,7 +210,7 @@ async def set_report_minutes(message: Message, state: FSMContext, bot):
     warning_minutes = data["warning_minutes"]
     await state.clear()
 
-    code = f"{random.randint(0, 999999):06d}"
+    code = f"{random.randint(0, 99):02d}"
     session_id = await db.create_attendance_session(code, warning_minutes, report_minutes)
 
     await message.answer(

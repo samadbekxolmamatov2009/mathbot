@@ -31,7 +31,7 @@ router.callback_query.filter(F.message.chat.type == "private")
 PHONE_RE = re.compile(r"^\+998\d{9}$")
 
 WELCOME_STICKER_FILE_ID = (
-    "CAACAgIAAxkBAAID8WqEPP6ypYIZMHQNZdoiPD-zPvdbAAJCAAMnFEkLruH2y45Rc_g9BA"
+    "CAACAgIAAxkBAAIFj2qUUqBXgxkLpd1EQXTtt2nnTtjbAAIhDAACWngGAAGqAAHjcMwHjQw9BA"
 )
 
 

@@ -191,6 +191,45 @@ async def get_test_edit_data_handler(request: web.Request):
     )
 
 
+async def _recalculate_test_scores(old_test, new_answers: dict, new_total_questions: int):
+    """Ustoz test javob kalitini to'g'irlaganda, o'quvchilar allaqachon
+    topshirgan javoblari YANGI kalit bo'yicha qayta tekshiriladi va
+    test_submissions.score yangilanadi (aks holda tangalar eski, xato
+    kalitga asoslangan holda qolib ketaveradi).
+
+    "Kech topshirilgani" uchun ball qisqartirilgan-qisqartirilmaganini
+    alohida ustunda saqlamaymiz - shuning uchun bu holatni eski (kalit
+    to'g'irlanishidan oldingi) ball orqali bilib olamiz: agar eski ball
+    eski to'g'ri javoblar sonidan kam bo'lsa, demak kech topshirilgan."""
+    old_answers = json.loads(old_test["answers"])
+    old_total_questions = old_test["total_questions"] or DEFAULT_TOTAL_QUESTIONS
+
+    submissions = await db.get_test_submissions_for_scoring(old_test["id"])
+    updates = []
+    for sub in submissions:
+        user_answers = json.loads(sub["answers"])
+
+        old_raw = sum(
+            1
+            for q in range(1, old_total_questions + 1)
+            if user_answers.get(str(q)) == old_answers.get(str(q))
+        )
+        is_late = old_raw > 0 and sub["score"] < old_raw
+
+        new_raw = sum(
+            1
+            for q in range(1, new_total_questions + 1)
+            if user_answers.get(str(q)) == new_answers.get(str(q))
+        )
+        new_score = new_raw * LATE_SUBMISSION_SCORE_RATIO if is_late else new_raw
+
+        if new_score != sub["score"]:
+            updates.append((sub["id"], new_score))
+
+    if updates:
+        await db.update_test_submission_scores(updates)
+
+
 async def update_test_handler(request: web.Request):
     try:
         test_id = int(request.match_info["id"])
@@ -244,6 +283,8 @@ async def update_test_handler(request: web.Request):
     if not saved or json.loads(saved["answers"]) != answers:
         log.error("Test yangilandi deb hisoblandi, lekin baza mos kelmadi! id=%s", test_id)
         return web.json_response({"error": "save_failed"}, status=500)
+
+    await _recalculate_test_scores(test, answers, total_questions)
 
     return web.json_response({"code": test["code"]})
 
@@ -559,6 +600,38 @@ async def aplus_get_edit_data_handler(request: web.Request):
     )
 
 
+async def _recalculate_aplus_scores(old_test, new_answers: dict, new_question_count: int):
+    """_recalculate_test_scores bilan bir xil mantiq, A+ (yozma javobli)
+    testlar uchun - javoblar answers_equivalent() orqali solishtiriladi."""
+    old_answers = json.loads(old_test["answers"])
+    old_question_count = old_test["question_count"]
+
+    submissions = await db.get_aplus_submissions_for_scoring(old_test["id"])
+    updates = []
+    for sub in submissions:
+        user_answers = json.loads(sub["answers"])
+
+        old_raw = sum(
+            1
+            for key in _aplus_field_keys(old_question_count)
+            if answers_equivalent(old_answers.get(key), user_answers.get(key))
+        )
+        is_late = old_raw > 0 and sub["score"] < old_raw
+
+        new_raw = sum(
+            1
+            for key in _aplus_field_keys(new_question_count)
+            if answers_equivalent(new_answers.get(key), user_answers.get(key))
+        )
+        new_score = new_raw * LATE_SUBMISSION_SCORE_RATIO if is_late else new_raw
+
+        if new_score != sub["score"]:
+            updates.append((sub["id"], new_score))
+
+    if updates:
+        await db.update_aplus_submission_scores(updates)
+
+
 async def aplus_update_test_handler(request: web.Request):
     try:
         test_id = int(request.match_info["id"])
@@ -604,6 +677,8 @@ async def aplus_update_test_handler(request: web.Request):
         return web.json_response({"error": "invalid_time_range"}, status=400)
 
     await db.update_aplus_test(test_id, answers, start_time, end_time, name, question_count)
+
+    await _recalculate_aplus_scores(test, answers, question_count)
 
     return web.json_response({"code": test["code"]})
 

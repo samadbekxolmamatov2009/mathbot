@@ -369,9 +369,9 @@ async def create_attendance_session(code: str, warning_minutes: int, report_minu
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE attendance_sessions SET is_active = 0 WHERE is_active = 1")
         cursor = await db.execute(
-            """INSERT INTO attendance_sessions (code, warning_minutes, report_minutes)
-               VALUES (?, ?, ?)""",
-            (code, warning_minutes, report_minutes),
+            """INSERT INTO attendance_sessions (code, created_at, warning_minutes, report_minutes)
+               VALUES (?, ?, ?, ?)""",
+            (code, now_tashkent_str("%Y-%m-%d %H:%M:%S"), warning_minutes, report_minutes),
         )
         await db.commit()
         return cursor.lastrowid
@@ -475,15 +475,35 @@ async def get_consecutive_miss_streak(telegram_id: int) -> int:
     return streak
 
 
+ATTENDANCE_MATRIX_RESET_KEY = "attendance_matrix_reset_at"
+
+
 async def get_attendance_matrix():
     """Barcha davomat sessiyalari, barcha ro'yxatdan o'tgan foydalanuvchilar va
-    kim qaysi sessiyada qatnashgani (session_id, telegram_id) juftliklari to'plami."""
+    kim qaysi sessiyada qatnashgani (session_id, telegram_id) juftliklari to'plami.
+
+    Agar admin/boss "🔄 Davomatni yangilash" tugmasini bosgan bo'lsa
+    (qarang: reset_attendance_matrix), faqat o'shandan keyin boshlangan
+    sessiyalar qaytariladi - shu orqali PDF jadval vaqt o'tishi bilan cheksiz
+    kengayib, hajmi oshib ketmaydi. Bu tangalar yoki davomat tarixining o'ziga
+    (attendance_records, get_user_coins) hech qanday ta'sir qilmaydi - faqat
+    shu jadval hisobotining ko'rinishini qisqartiradi."""
+    reset_at = await get_setting(ATTENDANCE_MATRIX_RESET_KEY)
+
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT id, code, created_at FROM attendance_sessions ORDER BY id ASC"
-        ) as cursor:
-            sessions = await cursor.fetchall()
+        if reset_at:
+            async with db.execute(
+                """SELECT id, code, created_at FROM attendance_sessions
+                   WHERE created_at > ? ORDER BY id ASC""",
+                (reset_at,),
+            ) as cursor:
+                sessions = await cursor.fetchall()
+        else:
+            async with db.execute(
+                "SELECT id, code, created_at FROM attendance_sessions ORDER BY id ASC"
+            ) as cursor:
+                sessions = await cursor.fetchall()
 
         async with db.execute(
             """SELECT telegram_id, full_name, registered_at FROM users
@@ -497,6 +517,16 @@ async def get_attendance_matrix():
             attended_set = {(row["session_id"], row["telegram_id"]) for row in await cursor.fetchall()}
 
     return sessions, users, attended_set
+
+
+async def reset_attendance_matrix():
+    """Davomat JADVALI (PDF matritsasi) ko'rinishini "yangi sahifadan"
+    boshlaydi - shu paytgacha bo'lgan sessiyalar endi jadvalda
+    ko'rsatilmaydi. DIQQAT: attendance_records o'zi o'chirilmaydi, shuning
+    uchun tangalar va davomat tarixi (get_user_coins, ketma-ket
+    qatnashmaslik hisobi) o'zgarishsiz qoladi - faqat "📊 Jadvalni ko'rish"
+    hisobotining hajmini cheklash uchun."""
+    await set_setting(ATTENDANCE_MATRIX_RESET_KEY, now_tashkent_str("%Y-%m-%d %H:%M:%S"))
 
 
 async def set_pending_absence_reason(telegram_id: int, session_id: int):
@@ -708,6 +738,30 @@ async def save_test_submission(test_id: int, telegram_id: int, answers: dict, sc
         await db.commit()
 
 
+async def get_test_submissions_for_scoring(test_id: int):
+    """id, answers, score - ustoz javob kalitini to'g'irlaganda ballarni
+    qayta hisoblash uchun."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, answers, score FROM test_submissions WHERE test_id = ?",
+            (test_id,),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def update_test_submission_scores(updates):
+    """updates: [(submission_id, yangi_ball), ...] - qayta hisoblangan
+    ballarni bazaga yozadi (shu orqali tangalar ham to'g'rilanadi)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        for submission_id, score in updates:
+            await db.execute(
+                "UPDATE test_submissions SET score = ? WHERE id = ?",
+                (score, submission_id),
+            )
+        await db.commit()
+
+
 # ---------- A+ testlar (yozma javobli, Mini App) ----------
 
 async def aplus_code_exists(code: str) -> bool:
@@ -842,6 +896,29 @@ async def save_aplus_submission(test_id: int, telegram_id: int, answers: dict, s
         await db.commit()
 
 
+async def get_aplus_submissions_for_scoring(test_id: int):
+    """id, answers, score - ustoz javob kalitini to'g'irlaganda ballarni
+    qayta hisoblash uchun."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, answers, score FROM aplus_submissions WHERE test_id = ?",
+            (test_id,),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def update_aplus_submission_scores(updates):
+    """updates: [(submission_id, yangi_ball), ...]"""
+    async with aiosqlite.connect(DB_PATH) as db:
+        for submission_id, score in updates:
+            await db.execute(
+                "UPDATE aplus_submissions SET score = ? WHERE id = ?",
+                (score, submission_id),
+            )
+        await db.commit()
+
+
 # ---------- Tangalar (davomat + test ballaridan hisoblanadi) ----------
 
 def _streak_bonus(flags) -> int:
@@ -865,7 +942,10 @@ async def get_user_coins(telegram_id: int) -> dict:
     - davomat: har bir qatnashgan sessiya uchun flat 1 ball
     - test natijasi: har bir to'g'ri javob uchun 1 ball (test 'score' ustunidan)
     - doimiy ishtirok: testlarni ketma-ket (o'tkazib yubormay) ishlash uchun
-      streak bonusi (1, 2, 3, ...; bitta testni ishlamasa yana 1 dan boshlanadi)
+      streak bonusi (1, 2, 3, ...; bitta testni ishlamasa yana 1 dan boshlanadi).
+      Faqat MUDDATI TUGAGAN testlar hisobga olinadi - hali ochiq (topshirish
+      vaqti tugamagan) test hech kim topshirmagan bo'lsa ham "o'tkazib
+      yuborilgan" deb hisoblanmasligi kerak.
     """
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
@@ -875,7 +955,8 @@ async def get_user_coins(telegram_id: int) -> dict:
             attendance_count = (await cursor.fetchone())[0]
 
         async with db.execute(
-            "SELECT id FROM tests ORDER BY id ASC"
+            "SELECT id FROM tests WHERE end_time IS NOT NULL AND end_time <= ? ORDER BY id ASC",
+            (now_tashkent_str(),),
         ) as cursor:
             test_ids = [row[0] for row in await cursor.fetchall()]
 
@@ -924,7 +1005,8 @@ async def get_leaderboard(limit: int = 50):
             attendance_counts = {row["telegram_id"]: row["cnt"] for row in await cursor.fetchall()}
 
         async with db.execute(
-            "SELECT id FROM tests ORDER BY id ASC"
+            "SELECT id FROM tests WHERE end_time IS NOT NULL AND end_time <= ? ORDER BY id ASC",
+            (now_tashkent_str(),),
         ) as cursor:
             test_ids = [row[0] for row in await cursor.fetchall()]
 

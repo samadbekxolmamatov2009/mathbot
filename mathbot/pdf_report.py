@@ -11,6 +11,8 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.pdfgen import canvas
 
+from timezone_utils import now_tashkent
+
 MONTHS_UZ = [
     "Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
     "Iyul", "Avgust", "Sentyabr", "Oktyabr", "Noyabr", "Dekabr",
@@ -94,7 +96,7 @@ def generate_period_report(
     submitted_at) maydonlariga ega. Har bir noyob test_name bitta "mavzu"
     ustuni bo'ladi (nechta mavzu bo'lsa - shuncha ustun, statik emas).
     """
-    until = until or datetime.now()
+    until = until or now_tashkent()
     date_str = until.strftime("%d.%m.%Y")
     period = f"{since.strftime('%d.%m.%Y')} — {until.strftime('%d.%m.%Y')}"
 
@@ -214,7 +216,7 @@ def generate_weekly_report(
     """ESKI (namuna ma'lumotli) hisobot - endi ishlatilmaydi, faqat orqaga
     moslik uchun saqlangan. Haqiqiy hisobot uchun generate_period_report()
     ishlatiladi (main.py'dagi report_schedule loop shuni chaqiradi)."""
-    generated_at = generated_at or datetime.now()
+    generated_at = generated_at or now_tashkent()
     period = f"{MONTHS_UZ[generated_at.month - 1]} {generated_at.year}"
     date_str = generated_at.strftime("%d.%m.%Y")
 
@@ -306,7 +308,7 @@ def generate_attendance_report(
 
     rows: (full_name, course_name, attended: bool) tuple'lari ro'yxati.
     """
-    generated_at = generated_at or datetime.now()
+    generated_at = generated_at or now_tashkent()
     date_str = generated_at.strftime("%d.%m.%Y %H:%M")
 
     total = len(rows)
@@ -406,7 +408,7 @@ def generate_attendance_matrix_report(
     payt botda hali ro'yxatdan o'tmagan edi - kulrang) qiymatlaridan biri,
     session_labels bilan bir xil uzunlikda.
     """
-    generated_at = generated_at or datetime.now()
+    generated_at = generated_at or now_tashkent()
     date_str = generated_at.strftime("%d.%m.%Y %H:%M")
 
     GREEN_BG = colors.HexColor("#DCF3E3")
@@ -523,7 +525,7 @@ def generate_test_results_report(
 
     rows: (full_name, score) tuple'lari ro'yxati, ball bo'yicha kamayish tartibida.
     """
-    generated_at = generated_at or datetime.now()
+    generated_at = generated_at or now_tashkent()
     date_str = generated_at.strftime("%d.%m.%Y %H:%M")
 
     page_w, page_h = A4
