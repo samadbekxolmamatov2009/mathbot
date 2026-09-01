@@ -20,13 +20,6 @@ from config import (
     WEBAPP_PORT,
     WEBAPP_URL,
 )
-import database as db
-from database import init_db
-from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
-from pdf_report import generate_period_report, generate_test_results_report
-from quiz_structure import DEFAULT_TOTAL_QUESTIONS
-from timezone_utils import now_tashkent
-from webapp.server import create_app
 
 KEEP_ALIVE_INTERVAL_SECONDS = 600  # 10 daqiqa
 
@@ -44,7 +37,13 @@ async def keep_webapp_alive_loop():
             except Exception:
                 logging.exception("Keep-alive ping muvaffaqiyatsiz")
             await asyncio.sleep(KEEP_ALIVE_INTERVAL_SECONDS)
-
+import database as db
+from database import init_db
+from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
+from pdf_report import generate_period_report, generate_test_results_report
+from quiz_structure import DEFAULT_TOTAL_QUESTIONS
+from timezone_utils import now_tashkent
+from webapp.server import create_app
 
 REPORT_PATH = os.path.join(tempfile.gettempdir(), "mathbot_haftalik_hisobot.pdf")
 TEST_REPORT_CHECK_INTERVAL = 60
@@ -67,35 +66,37 @@ async def send_report_schedule_loop(bot: Bot):
         try:
             schedule = await db.get_report_schedule()
             now = now_tashkent()
-            schedule_log = (
-                {
-                    "day_of_week": schedule["day_of_week"],
-                    "time_of_day": schedule["time_of_day"],
-                    "enabled": schedule["enabled"],
-                    "last_sent_at": schedule["last_sent_at"],
-                }
-                if schedule
-                else None
-            )
-            logging.info(
-                "Hisobot tekshiruvi: schedule=%s hozir=%s (kun=%s soat=%s)",
-                schedule_log,
-                now.strftime("%Y-%m-%d %H:%M:%S"),
-                now.weekday(),
-                now.strftime("%H:%M"),
-            )
-            if schedule and schedule["enabled"]:
-                current_week = now.strftime("%G-W%V")
-                last_sent_at = schedule["last_sent_at"]
-                last_sent_week = (
-                    datetime.fromisoformat(last_sent_at).strftime("%G-W%V")
-                    if last_sent_at
-                    else None
+            if schedule:
+                logging.info(
+                    "Hisobot tekshiruvi: kun=%s vaqt=%s enabled=%s last_sent_at=%s | hozir kun=%s vaqt=%s",
+                    schedule["day_of_week"],
+                    schedule["time_of_day"],
+                    schedule["enabled"],
+                    schedule["last_sent_at"],
+                    now.weekday(),
+                    now.strftime("%H:%M"),
                 )
+            else:
+                logging.info("Hisobot tekshiruvi: schedule=None hozir=%s", now.strftime("%H:%M"))
+            if schedule and schedule["enabled"]:
+                last_sent_at = schedule["last_sent_at"]
+                last_sent_date = (
+                    datetime.fromisoformat(last_sent_at).date() if last_sent_at else None
+                )
+                # Aniq daqiqa ("==") emas, "vaqt allaqachon yetdi" ("<=")
+                # tekshiriladi - aks holda tsikl aynan shu daqiqaga to'g'ri
+                # kelmay qolsa (bot qayta ishga tushib qolsa yoki biroz
+                # kechiksa), hisobot butun haftaga tushib qolardi. Haftalik
+                # emas KUNLIK chegara (last_sent_date) ishlatiladi - shu kuni
+                # bir martadan ortiq yubormaslik uchun; ISO-hafta bo'yicha
+                # solishtirish oldingi versiyada xato edi: agar sinov uchun
+                # boshqa kunda bir marta yuborilgan bo'lsa, haqiqiy
+                # rejalashtirilgan kun HAM SHU HAFTADA bo'lsa, "bu hafta
+                # allaqachon yuborilgan" deb noto'g'ri o'tkazib yuborilardi.
                 if (
                     now.weekday() == schedule["day_of_week"]
-                    and now.strftime("%H:%M") == schedule["time_of_day"]
-                    and last_sent_week != current_week
+                    and now.strftime("%H:%M") >= schedule["time_of_day"]
+                    and last_sent_date != now.date()
                 ):
                     try:
                         since_iso = last_sent_at or ""

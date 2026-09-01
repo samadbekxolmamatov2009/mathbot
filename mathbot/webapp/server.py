@@ -424,6 +424,7 @@ async def my_results_handler(request: web.Request):
         return web.json_response({"error": "invalid_init_data"}, status=401)
 
     rows = await db.get_user_test_results(user["id"])
+    aplus_rows = await db.get_user_aplus_results(user["id"])
     coins = await db.get_user_coins(user["id"])
     return web.json_response(
         {
@@ -436,6 +437,16 @@ async def my_results_handler(request: web.Request):
                     "submitted_at": row["submitted_at"],
                 }
                 for row in rows
+            ],
+            "aplus_results": [
+                {
+                    "name": row["name"] or row["code"],
+                    "code": row["code"],
+                    "score": row["score"],
+                    "total_questions": row["total_questions"],
+                    "submitted_at": row["submitted_at"],
+                }
+                for row in aplus_rows
             ],
             "coins": {
                 "attendance_count": coins["attendance_count"],

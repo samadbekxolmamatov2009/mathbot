@@ -47,6 +47,21 @@ def _eval_node(node):
 
 
 _BARE_SQRT_RE = re.compile(r"√(\d+(?:\.\d+)?)")
+_IMPLICIT_MULT_OPEN_RE = re.compile(r"([0-9)])(sqrt\(|\()")
+_IMPLICIT_MULT_CLOSE_RE = re.compile(r"(\))([0-9])")
+
+
+def _insert_implicit_mult(s: str) -> str:
+    """"2sqrt(3)", "2(3+4)", "(2+3)4", "sqrt(2)sqrt(3)" kabi son bilan ildiz/
+    qavs orasida ko'paytirish belgisi yozilmagan ifodalarga "*" qo'yadi -
+    aks holda ast.parse xato berib, sonli solishtirish ishlamay qoladi
+    (masalan "2√3" "√12" bilan teng deb topilmay qolardi)."""
+    prev = None
+    while prev != s:
+        prev = s
+        s = _IMPLICIT_MULT_OPEN_RE.sub(r"\1*\2", s)
+        s = _IMPLICIT_MULT_CLOSE_RE.sub(r"\1*\2", s)
+    return s
 
 
 def _normalize_text(s: str) -> str:
@@ -58,6 +73,7 @@ def _normalize_text(s: str) -> str:
     s = _BARE_SQRT_RE.sub(lambda m: f"sqrt({m.group(1)})", s)
     s = s.replace("√", "sqrt")
     s = s.replace("^", "**")
+    s = _insert_implicit_mult(s)
     return s
 
 

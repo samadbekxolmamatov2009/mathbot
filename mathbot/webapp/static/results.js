@@ -16,6 +16,16 @@ const barsEl = document.getElementById("bars");
 const chartHintEl = document.getElementById("chartHint");
 const testEmptyEl = document.getElementById("testEmpty");
 
+const aplusSectionEl = document.getElementById("aplusSection");
+const aplusStatsRowEl = document.getElementById("aplusStatsRow");
+const aplusStatTotalEl = document.getElementById("aplusStatTotal");
+const aplusStatAvgEl = document.getElementById("aplusStatAvg");
+const aplusStatDeltaEl = document.getElementById("aplusStatDelta");
+const aplusScrollEl = document.getElementById("aplusChartScroll");
+const aplusBarsEl = document.getElementById("aplusBars");
+const aplusChartHintEl = document.getElementById("aplusChartHint");
+const aplusEmptyEl = document.getElementById("aplusEmpty");
+
 const streakSectionEl = document.getElementById("streakSection");
 const streakValueEl = document.getElementById("streakValue");
 
@@ -30,27 +40,27 @@ function formatDate(value) {
   return value.split(" ")[0].split("T")[0];
 }
 
-function renderStats(results) {
+function renderStats(results, els) {
   const pcts = results.map((r) => (r.total_questions ? (r.score / r.total_questions) * 100 : 0));
   const avg = Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length);
 
-  statTotalEl.textContent = String(results.length);
-  statAvgEl.textContent = `${avg}%`;
+  els.statTotalEl.textContent = String(results.length);
+  els.statAvgEl.textContent = `${avg}%`;
 
   if (pcts.length >= 2) {
     const delta = Math.round(pcts[pcts.length - 1] - pcts[pcts.length - 2]);
     const sign = delta > 0 ? "+" : "";
-    statDeltaEl.textContent = `${sign}${delta}%`;
-    statDeltaEl.classList.toggle("up", delta > 0);
-    statDeltaEl.classList.toggle("down", delta < 0);
+    els.statDeltaEl.textContent = `${sign}${delta}%`;
+    els.statDeltaEl.classList.toggle("up", delta > 0);
+    els.statDeltaEl.classList.toggle("down", delta < 0);
   } else {
-    statDeltaEl.textContent = "—";
+    els.statDeltaEl.textContent = "—";
   }
 
-  statsRowEl.hidden = false;
+  els.statsRowEl.hidden = false;
 }
 
-function renderChart(results) {
+function renderChart(results, els) {
   const frag = document.createDocumentFragment();
 
   results.forEach((r, i) => {
@@ -87,11 +97,22 @@ function renderChart(results) {
     frag.appendChild(col);
   });
 
-  barsEl.appendChild(frag);
-  scrollEl.hidden = false;
-  chartHintEl.hidden = false;
-  scrollEl.scrollLeft = scrollEl.scrollWidth;
+  els.barsEl.appendChild(frag);
+  els.scrollEl.hidden = false;
+  els.chartHintEl.hidden = false;
+  els.scrollEl.scrollLeft = els.scrollEl.scrollWidth;
 }
+
+const TEST_CHART_ELS = { statsRowEl, statTotalEl, statAvgEl, statDeltaEl, scrollEl, barsEl, chartHintEl };
+const APLUS_CHART_ELS = {
+  statsRowEl: aplusStatsRowEl,
+  statTotalEl: aplusStatTotalEl,
+  statAvgEl: aplusStatAvgEl,
+  statDeltaEl: aplusStatDeltaEl,
+  scrollEl: aplusScrollEl,
+  barsEl: aplusBarsEl,
+  chartHintEl: aplusChartHintEl,
+};
 
 async function init() {
   try {
@@ -106,9 +127,10 @@ async function init() {
     }
 
     const results = data.results || [];
+    const aplusResults = data.aplus_results || [];
     const coins = data.coins || { attendance_count: 0, attendance_coins: 0, test_streak_coins: 0, total: 0 };
 
-    if (results.length === 0 && coins.total === 0) {
+    if (results.length === 0 && aplusResults.length === 0 && coins.total === 0) {
       emptyEl.hidden = false;
       return;
     }
@@ -118,11 +140,20 @@ async function init() {
 
     testSectionEl.hidden = false;
     if (results.length > 0) {
-      renderStats(results);
-      renderChart(results);
+      renderStats(results, TEST_CHART_ELS);
+      renderChart(results, TEST_CHART_ELS);
     } else {
       statsRowEl.hidden = true;
       testEmptyEl.hidden = false;
+    }
+
+    aplusSectionEl.hidden = false;
+    if (aplusResults.length > 0) {
+      renderStats(aplusResults, APLUS_CHART_ELS);
+      renderChart(aplusResults, APLUS_CHART_ELS);
+    } else {
+      aplusStatsRowEl.hidden = true;
+      aplusEmptyEl.hidden = false;
     }
 
     streakValueEl.textContent = String(coins.test_streak_coins);
