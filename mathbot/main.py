@@ -59,46 +59,49 @@ DIRECTION_LABELS = {
 
 async def send_report_schedule_loop(bot: Bot):
     """Haftalik hisobot PDF'ini "⚙️ Sozlamalar"da (Boss/admin tomonidan)
-    belgilangan kun/vaqtda, real test natijalari asosida hisoblab, kanalga
-    yuboradi. Har soatda emas - faqat belgilangan kun/vaqtda, va faqat
-    oldingi hisobotdan keyin topshirilgan natijalarni hisobga oladi."""
+    belgilangan kun/vaqt(lar)da, real test natijalari asosida hisoblab,
+    kanalga yuboradi. Bir nechta kun/vaqt yozuvi bo'lishi mumkin (masalan bir
+    kunda yoki haftada bir necha marta yuborish uchun) - har biri mustaqil
+    "signal" sifatida tekshiriladi. Hisobot MAZMUNI ("oxirgi yuborilgandan
+    beri" oralig'i) esa yozuvlardan mustaqil, umumiy "last_report_sent_at"
+    sozlamasi orqali kuzatiladi - shunda bir kunda ikkita yozuv ketma-ket
+    ishga tushsa ham, ikkinchisi faqat BIRINCHISIDAN keyingi yangi
+    natijalarni o'z ichiga oladi (takrorlanish bo'lmaydi)."""
     while True:
         try:
-            schedule = await db.get_report_schedule()
+            schedules = await db.get_report_schedules()
             now = now_tashkent()
-            if schedule:
+            if schedules:
                 logging.info(
-                    "Hisobot tekshiruvi: kun=%s vaqt=%s enabled=%s last_sent_at=%s | hozir kun=%s vaqt=%s",
-                    schedule["day_of_week"],
-                    schedule["time_of_day"],
-                    schedule["enabled"],
-                    schedule["last_sent_at"],
+                    "Hisobot tekshiruvi: %d ta jadval | hozir kun=%s vaqt=%s",
+                    len(schedules),
                     now.weekday(),
                     now.strftime("%H:%M"),
                 )
             else:
                 logging.info("Hisobot tekshiruvi: schedule=None hozir=%s", now.strftime("%H:%M"))
-            if schedule and schedule["enabled"]:
-                last_sent_at = schedule["last_sent_at"]
-                last_sent_date = (
-                    datetime.fromisoformat(last_sent_at).date() if last_sent_at else None
-                )
+
+            for schedule in schedules:
+                if not schedule["enabled"]:
+                    continue
+
+                last_fired_date = schedule["last_fired_date"]
                 # Aniq daqiqa ("==") emas, "vaqt allaqachon yetdi" ("<=")
                 # tekshiriladi - aks holda tsikl aynan shu daqiqaga to'g'ri
                 # kelmay qolsa (bot qayta ishga tushib qolsa yoki biroz
-                # kechiksa), hisobot butun haftaga tushib qolardi. Haftalik
-                # emas KUNLIK chegara (last_sent_date) ishlatiladi - shu kuni
-                # bir martadan ortiq yubormaslik uchun; ISO-hafta bo'yicha
-                # solishtirish oldingi versiyada xato edi: agar sinov uchun
-                # boshqa kunda bir marta yuborilgan bo'lsa, haqiqiy
-                # rejalashtirilgan kun HAM SHU HAFTADA bo'lsa, "bu hafta
-                # allaqachon yuborilgan" deb noto'g'ri o'tkazib yuborilardi.
+                # kechiksa), hisobot butun haftaga tushib qolardi. Shu
+                # YOZUVNING o'zi bir kunda bir martadan ortiq ishga
+                # tushmasligi uchun faqat shu yozuvning last_fired_date'i
+                # solishtiriladi - boshqa yozuvlarga ta'sir qilmaydi, ya'ni
+                # bir kunga bir nechta yozuv qo'yilsa, har biri o'z vaqtida
+                # alohida yuboraveradi.
                 if (
                     now.weekday() == schedule["day_of_week"]
                     and now.strftime("%H:%M") >= schedule["time_of_day"]
-                    and last_sent_date != now.date()
+                    and last_fired_date != now.strftime("%Y-%m-%d")
                 ):
                     try:
+                        last_sent_at = await db.get_setting("last_report_sent_at")
                         since_iso = last_sent_at or ""
                         since_dt = (
                             datetime.fromisoformat(last_sent_at)
@@ -109,7 +112,9 @@ async def send_report_schedule_loop(bot: Bot):
                         generate_period_report(REPORT_PATH, rows, since_dt, now)
                         channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
                         await bot.send_document(channel, FSInputFile(REPORT_PATH))
-                        await db.mark_report_sent(now.strftime("%Y-%m-%dT%H:%M:%S"))
+                        sent_at_iso = now.strftime("%Y-%m-%dT%H:%M:%S")
+                        await db.set_setting("last_report_sent_at", sent_at_iso)
+                        await db.mark_report_schedule_fired(schedule["id"], now.strftime("%Y-%m-%d"))
                     except Exception:
                         logging.exception("Haftalik hisobotni kanalga yuborishda xatolik yuz berdi")
         except Exception:

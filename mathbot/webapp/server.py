@@ -460,30 +460,44 @@ async def my_results_handler(request: web.Request):
     )
 
 
-async def get_report_schedule_handler(request: web.Request):
+def _validate_schedule_input(body: dict):
+    day_of_week = body.get("day_of_week")
+    time_of_day = body.get("time_of_day") or ""
+    enabled = bool(body.get("enabled", True))
+
+    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
+        return None, web.json_response({"error": "invalid_day"}, status=400)
+    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
+        return None, web.json_response({"error": "invalid_time"}, status=400)
+
+    return (day_of_week, time_of_day, enabled), None
+
+
+async def list_report_schedules_handler(request: web.Request):
     user = verify_init_data(request.query.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
     if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
-    schedule = await db.get_report_schedule()
-    if not schedule:
-        return web.json_response({"schedule": None})
-
+    schedules = await db.get_report_schedules()
     return web.json_response(
         {
-            "schedule": {
-                "day_of_week": schedule["day_of_week"],
-                "time_of_day": schedule["time_of_day"],
-                "enabled": bool(schedule["enabled"]),
-                "last_sent_at": schedule["last_sent_at"],
-            }
+            "schedules": [
+                {
+                    "id": row["id"],
+                    "day_of_week": row["day_of_week"],
+                    "time_of_day": row["time_of_day"],
+                    "enabled": bool(row["enabled"]),
+                    "last_fired_date": row["last_fired_date"],
+                }
+                for row in schedules
+            ]
         }
     )
 
 
-async def save_report_schedule_handler(request: web.Request):
+async def add_report_schedule_handler(request: web.Request):
     try:
         body = await request.json()
     except json.JSONDecodeError:
@@ -495,17 +509,51 @@ async def save_report_schedule_handler(request: web.Request):
     if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
-    day_of_week = body.get("day_of_week")
-    time_of_day = body.get("time_of_day") or ""
-    enabled = bool(body.get("enabled", True))
+    parsed, error = _validate_schedule_input(body)
+    if error:
+        return error
+    day_of_week, time_of_day, enabled = parsed
 
-    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
-        return web.json_response({"error": "invalid_day"}, status=400)
-    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
-        return web.json_response({"error": "invalid_time"}, status=400)
+    schedule_id = await db.add_report_schedule(day_of_week, time_of_day, enabled, user["id"])
+    return web.json_response({"ok": True, "id": schedule_id})
 
-    await db.save_report_schedule(day_of_week, time_of_day, enabled, user["id"])
 
+async def update_report_schedule_handler(request: web.Request):
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    user = verify_init_data(body.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    parsed, error = _validate_schedule_input(body)
+    if error:
+        return error
+    day_of_week, time_of_day, enabled = parsed
+
+    schedule_id = int(request.match_info["id"])
+    await db.update_report_schedule(schedule_id, day_of_week, time_of_day, enabled, user["id"])
+    return web.json_response({"ok": True})
+
+
+async def delete_report_schedule_handler(request: web.Request):
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    user = verify_init_data(body.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    schedule_id = int(request.match_info["id"])
+    await db.delete_report_schedule(schedule_id)
     return web.json_response({"ok": True})
 
 
@@ -879,8 +927,10 @@ def create_app() -> web.Application:
     app.router.add_post("/api/test/{code}/submit", submit_test_handler)
     app.router.add_get("/api/rating", rating_handler)
     app.router.add_get("/api/my_results", my_results_handler)
-    app.router.add_get("/api/report_schedule", get_report_schedule_handler)
-    app.router.add_post("/api/report_schedule", save_report_schedule_handler)
+    app.router.add_get("/api/report_schedule", list_report_schedules_handler)
+    app.router.add_post("/api/report_schedule", add_report_schedule_handler)
+    app.router.add_post("/api/report_schedule/{id}/update", update_report_schedule_handler)
+    app.router.add_post("/api/report_schedule/{id}/delete", delete_report_schedule_handler)
     app.router.add_post("/api/aplus/create_test", aplus_create_test_handler)
     app.router.add_get("/api/aplus/test_by_id/{id}", aplus_get_edit_data_handler)
     app.router.add_post("/api/aplus/test_by_id/{id}/update", aplus_update_test_handler)

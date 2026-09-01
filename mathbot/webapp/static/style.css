@@ -361,6 +361,35 @@ body {
   transform: translateX(20px);
 }
 
+.schedule-item {
+  border-left: 4px solid var(--primary);
+}
+
+.schedule-item-time {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.schedule-item.disabled {
+  opacity: 0.55;
+  border-left-color: var(--border);
+}
+
+.schedule-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.schedule-del-btn {
+  border: none;
+  background: none;
+  font-size: 16px;
+  padding: 4px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .question-count-bar {
   display: flex;
   align-items: center;

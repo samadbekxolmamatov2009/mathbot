@@ -8,56 +8,46 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <div id="formState">
-
-    <div class="header">
-      <h1>📊 Haftalik hisobot</h1>
-      <p>Belgilangan kun/vaqtda, oxirgi hisobotdan keyin topshirilgan barcha test natijalari asosida PDF avtomatik kanalga yuboriladi.</p>
-    </div>
-
-    <div class="time-field">
-      <div class="settings-row">
-        <label class="settings-label" for="reportEnabledToggle">Faollashtirish</label>
-        <label class="switch">
-          <input type="checkbox" id="reportEnabledToggle" />
-          <span class="switch-slider"></span>
-        </label>
-      </div>
-    </div>
-
-    <div class="time-field">
-      <label>Qaysi kuni</label>
-      <div class="day-picker" id="reportDayPicker">
-        <button type="button" class="day-btn" data-day="0">Dush</button>
-        <button type="button" class="day-btn" data-day="1">Sesh</button>
-        <button type="button" class="day-btn" data-day="2">Chor</button>
-        <button type="button" class="day-btn" data-day="3">Pay</button>
-        <button type="button" class="day-btn" data-day="4">Juma</button>
-        <button type="button" class="day-btn" data-day="5">Shan</button>
-        <button type="button" class="day-btn" data-day="6">Yak</button>
-      </div>
-    </div>
-
-    <div class="time-field">
-      <label>Soat</label>
-      <div class="time-picker">
-        <select id="reportHourSelect"></select>
-        <span class="time-sep">:</span>
-        <select id="reportMinuteSelect"></select>
-      </div>
-    </div>
-
-    <div class="settings-status" id="reportStatusLine"></div>
-
-    <button type="button" id="saveBtn" class="save-btn">💾 Saqlash</button>
+  <div class="header">
+    <h1>📊 Haftalik hisobot</h1>
+    <p>Har bir qo'shilgan kun/vaqtda, oxirgi yuborilgan hisobotdan keyin topshirilgan barcha test natijalari asosida PDF avtomatik kanalga yuboriladi. Xohlagancha vaqt qo'shishingiz mumkin — bir kunda yoki haftada bir necha marta ham.</p>
   </div>
 
-  <div id="successState" style="display:none">
-    <div class="result-card">
-      <p>✅ Sozlamalar saqlandi</p>
+  <div id="scheduleListEmpty" class="settings-status" style="display:none">
+    Hozircha hech qanday vaqt qo'shilmagan.
+  </div>
+  <div id="scheduleList" class="result-list" style="margin: 0 16px 14px;"></div>
+
+  <hr class="settings-divider" />
+
+  <div class="header" style="padding-top:0">
+    <h2 style="margin:0 0 4px;font-size:16px;">➕ Yangi vaqt qo'shish</h2>
+  </div>
+
+  <div class="time-field">
+    <label>Qaysi kuni</label>
+    <div class="day-picker" id="newDayPicker">
+      <button type="button" class="day-btn" data-day="0">Dush</button>
+      <button type="button" class="day-btn" data-day="1">Sesh</button>
+      <button type="button" class="day-btn" data-day="2">Chor</button>
+      <button type="button" class="day-btn" data-day="3">Pay</button>
+      <button type="button" class="day-btn" data-day="4">Juma</button>
+      <button type="button" class="day-btn" data-day="5">Shan</button>
+      <button type="button" class="day-btn" data-day="6">Yak</button>
     </div>
   </div>
 
-  <script src="/settings.js?v=4"></script>
+  <div class="time-field">
+    <label>Soat</label>
+    <div class="time-picker">
+      <select id="newHourSelect"></select>
+      <span class="time-sep">:</span>
+      <select id="newMinuteSelect"></select>
+    </div>
+  </div>
+
+  <button type="button" id="addBtn" class="save-btn">➕ Qo'shish</button>
+
+  <script src="/settings.js?v=5"></script>
 </body>
 </html>

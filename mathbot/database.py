@@ -126,17 +126,51 @@ async def init_db():
                 UNIQUE(test_id, telegram_id)
             )
         """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS report_schedule (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                day_of_week INTEGER NOT NULL DEFAULT 0,
-                time_of_day TEXT NOT NULL DEFAULT '09:00',
-                enabled INTEGER NOT NULL DEFAULT 0,
-                last_sent_at TEXT,
-                updated_by INTEGER,
-                updated_at TEXT DEFAULT (datetime('now'))
-            )
-        """)
+        # report_schedule dastlab bitta qatorli (id=1 CHECK) jadval edi - faqat
+        # bitta kun/vaqt saqlanardi. Endi bir nechta vaqt qo'shish (masalan bir
+        # kunda yoki haftada bir necha marta yuborish) imkoni uchun ko'p qatorli
+        # jadvalga o'tkazildi. Eski (production'da hali ham bo'lishi mumkin
+        # bo'lgan) sxema aniqlansa, mavjud yagona sozlama saqlab qolingan holda
+        # yangi sxemaga ko'chiriladi.
+        schedule_sql_cursor = await db.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'report_schedule'"
+        )
+        schedule_sql_row = await schedule_sql_cursor.fetchone()
+        existing_schedule_sql = schedule_sql_row[0] if schedule_sql_row else None
+
+        if existing_schedule_sql and "CHECK" in existing_schedule_sql:
+            await db.execute("ALTER TABLE report_schedule RENAME TO report_schedule_old")
+            await db.execute("""
+                CREATE TABLE report_schedule (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    day_of_week INTEGER NOT NULL,
+                    time_of_day TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    last_fired_date TEXT,
+                    updated_by INTEGER,
+                    updated_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
+            await db.execute("""
+                INSERT INTO report_schedule
+                    (day_of_week, time_of_day, enabled, last_fired_date, updated_by, updated_at)
+                SELECT day_of_week, time_of_day, enabled,
+                       substr(last_sent_at, 1, 10), updated_by, updated_at
+                FROM report_schedule_old
+            """)
+            await db.execute("DROP TABLE report_schedule_old")
+        else:
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS report_schedule (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    day_of_week INTEGER NOT NULL,
+                    time_of_day TEXT NOT NULL,
+                    enabled INTEGER NOT NULL DEFAULT 1,
+                    last_fired_date TEXT,
+                    updated_by INTEGER,
+                    updated_at TEXT DEFAULT (datetime('now'))
+                )
+            """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS admins (
                 telegram_id INTEGER PRIMARY KEY,
@@ -1074,36 +1108,54 @@ async def get_leaderboard(limit: int = 50):
 
 # ---------- Haftalik hisobot rejasi (haqiqiy test natijalari asosida) ----------
 
-async def get_report_schedule():
+async def get_report_schedules():
+    """Barcha hisobot jadval yozuvlarini qaytaradi (bir nechta kun/vaqt
+    bo'lishi mumkin - masalan bir kunda yoki haftada bir necha marta
+    yuborish uchun)."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM report_schedule WHERE id = 1"
+            "SELECT * FROM report_schedule ORDER BY day_of_week ASC, time_of_day ASC"
         ) as cursor:
-            return await cursor.fetchone()
+            return await cursor.fetchall()
 
 
-async def save_report_schedule(day_of_week: int, time_of_day: str, enabled: bool, updated_by: int):
+async def add_report_schedule(day_of_week: int, time_of_day: str, enabled: bool, updated_by: int) -> int:
+    async with aiosqlite.connect(DB_PATH) as db:
+        cursor = await db.execute(
+            """INSERT INTO report_schedule (day_of_week, time_of_day, enabled, updated_by, updated_at)
+               VALUES (?, ?, ?, ?, datetime('now'))""",
+            (day_of_week, time_of_day, int(enabled), updated_by),
+        )
+        await db.commit()
+        return cursor.lastrowid
+
+
+async def update_report_schedule(
+    schedule_id: int, day_of_week: int, time_of_day: str, enabled: bool, updated_by: int
+):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO report_schedule
-                   (id, day_of_week, time_of_day, enabled, updated_by, updated_at)
-               VALUES (1, ?, ?, ?, ?, datetime('now'))
-               ON CONFLICT(id) DO UPDATE SET
-                   day_of_week = excluded.day_of_week,
-                   time_of_day = excluded.time_of_day,
-                   enabled = excluded.enabled,
-                   updated_by = excluded.updated_by,
-                   updated_at = excluded.updated_at""",
-            (day_of_week, time_of_day, int(enabled), updated_by),
+            """UPDATE report_schedule
+               SET day_of_week = ?, time_of_day = ?, enabled = ?, updated_by = ?,
+                   updated_at = datetime('now')
+               WHERE id = ?""",
+            (day_of_week, time_of_day, int(enabled), updated_by, schedule_id),
         )
         await db.commit()
 
 
-async def mark_report_sent(sent_at_iso: str):
+async def delete_report_schedule(schedule_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM report_schedule WHERE id = ?", (schedule_id,))
+        await db.commit()
+
+
+async def mark_report_schedule_fired(schedule_id: int, fired_date: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            "UPDATE report_schedule SET last_sent_at = ? WHERE id = 1", (sent_at_iso,)
+            "UPDATE report_schedule SET last_fired_date = ? WHERE id = ?",
+            (fired_date, schedule_id),
         )
         await db.commit()
 

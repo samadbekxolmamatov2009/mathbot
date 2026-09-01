@@ -25,6 +25,11 @@ function pad(n) {
   return String(n).padStart(2, "0");
 }
 
+function showMessage(msg) {
+  if (tg) tg.showAlert(msg);
+  else alert(msg);
+}
+
 function fillTimeSelects(hourSelect, minuteSelect) {
   for (let h = 0; h < 24; h++) {
     const opt = document.createElement("option");
@@ -40,20 +45,20 @@ function fillTimeSelects(hourSelect, minuteSelect) {
   }
 }
 
-function makeDayPicker(container, onChange) {
+function makeDayPicker(container) {
   let selected = 0;
   function select(day) {
     selected = day;
     [...container.children].forEach((btn) => {
       btn.classList.toggle("selected", Number(btn.dataset.day) === day);
     });
-    onChange();
   }
   container.addEventListener("click", (e) => {
     const btn = e.target.closest(".day-btn");
     if (!btn) return;
     select(Number(btn.dataset.day));
   });
+  select(0);
   return {
     select,
     get value() {
@@ -62,102 +67,166 @@ function makeDayPicker(container, onChange) {
   };
 }
 
-// ---------------- Haftalik hisobot ----------------
+// ---------------- Haftalik hisobot: mavjud vaqtlar ro'yxati ----------------
 
-const reportEnabledToggle = document.getElementById("reportEnabledToggle");
-const reportDayPickerEl = document.getElementById("reportDayPicker");
-const reportHourSelect = document.getElementById("reportHourSelect");
-const reportMinuteSelect = document.getElementById("reportMinuteSelect");
-const reportStatusLine = document.getElementById("reportStatusLine");
+const scheduleListEl = document.getElementById("scheduleList");
+const scheduleListEmptyEl = document.getElementById("scheduleListEmpty");
 
-fillTimeSelects(reportHourSelect, reportMinuteSelect);
-const reportDayPicker = makeDayPicker(reportDayPickerEl, updateReportStatus);
-
-function updateReportStatus() {
-  const time = `${reportHourSelect.value}:${reportMinuteSelect.value}`;
-  if (!reportEnabledToggle.checked) {
-    reportStatusLine.textContent = "🔕 O'chirilgan — hisobot avtomatik yuborilmaydi.";
-    return;
-  }
-  reportStatusLine.textContent = `🔔 Har ${WEEKDAY_NAMES[reportDayPicker.value]}, soat ${time} da yuboriladi.`;
+function initData() {
+  return tg ? tg.initData : "";
 }
 
-reportEnabledToggle.addEventListener("change", updateReportStatus);
-reportHourSelect.addEventListener("change", updateReportStatus);
-reportMinuteSelect.addEventListener("change", updateReportStatus);
-
-async function loadReportSchedule() {
+async function loadSchedules() {
   try {
-    const res = await fetch(`/api/report_schedule?init_data=${encodeURIComponent(tg ? tg.initData : "")}`);
+    const res = await fetch(`/api/report_schedule?init_data=${encodeURIComponent(initData())}`);
     const data = await res.json();
-    if (!res.ok) return;
-
-    if (data.schedule) {
-      reportDayPicker.select(data.schedule.day_of_week);
-      const [h, m] = data.schedule.time_of_day.split(":");
-      reportHourSelect.value = h;
-      reportMinuteSelect.value = m;
-      reportEnabledToggle.checked = data.schedule.enabled;
-    } else {
-      reportDayPicker.select(0);
-      reportHourSelect.value = "09";
-      reportMinuteSelect.value = "00";
-    }
-    updateReportStatus();
-  } catch (e) {
-    reportStatusLine.textContent = "Server bilan bog'lanishda xatolik.";
-  }
-}
-
-async function saveReportSchedule() {
-  const res = await fetch("/api/report_schedule", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      init_data: tg ? tg.initData : "",
-      day_of_week: reportDayPicker.value,
-      time_of_day: `${reportHourSelect.value}:${reportMinuteSelect.value}`,
-      enabled: reportEnabledToggle.checked,
-    }),
-  });
-  return res.ok;
-}
-
-// ---------------- Saqlash ----------------
-
-const saveBtn = document.getElementById("saveBtn");
-const formStateEl = document.getElementById("formState");
-const successStateEl = document.getElementById("successState");
-
-async function saveAll() {
-  saveBtn.disabled = true;
-  saveBtn.textContent = "⏳ Saqlanmoqda...";
-  try {
-    const reportOk = await saveReportSchedule();
-
-    if (!reportOk) {
-      saveBtn.disabled = false;
-      saveBtn.textContent = "💾 Saqlash";
-      const msg = "Xatolik yuz berdi. Qaytadan urinib ko'ring.";
-      if (tg) tg.showAlert(msg);
-      else alert(msg);
+    if (!res.ok) {
+      showMessage("Ro'yxatni yuklab bo'lmadi.");
       return;
     }
-
-    formStateEl.style.display = "none";
-    successStateEl.style.display = "block";
-    if (tg) {
-      setTimeout(() => tg.close(), 900);
-    }
+    renderSchedules(data.schedules || []);
   } catch (e) {
-    saveBtn.disabled = false;
-    saveBtn.textContent = "💾 Saqlash";
-    const msg = "Server bilan bog'lanishda xatolik.";
-    if (tg) tg.showAlert(msg);
-    else alert(msg);
+    showMessage("Server bilan bog'lanishda xatolik.");
   }
 }
 
-saveBtn.addEventListener("click", saveAll);
+function renderSchedules(schedules) {
+  scheduleListEl.innerHTML = "";
+  scheduleListEmptyEl.style.display = schedules.length === 0 ? "block" : "none";
 
-loadReportSchedule();
+  for (const item of schedules) {
+    const row = document.createElement("div");
+    row.className = "result-row schedule-item" + (item.enabled ? "" : " disabled");
+
+    const timeSpan = document.createElement("span");
+    timeSpan.className = "schedule-item-time";
+    timeSpan.textContent = `${WEEKDAY_NAMES[item.day_of_week]}, soat ${item.time_of_day}`;
+    row.appendChild(timeSpan);
+
+    const actions = document.createElement("div");
+    actions.className = "schedule-item-actions";
+
+    const label = document.createElement("label");
+    label.className = "switch";
+    const toggle = document.createElement("input");
+    toggle.type = "checkbox";
+    toggle.checked = item.enabled;
+    toggle.addEventListener("change", async () => {
+      toggle.disabled = true;
+      const ok = await updateSchedule(item.id, item.day_of_week, item.time_of_day, toggle.checked);
+      toggle.disabled = false;
+      if (ok) {
+        row.classList.toggle("disabled", !toggle.checked);
+      } else {
+        toggle.checked = !toggle.checked;
+        showMessage("Xatolik yuz berdi. Qaytadan urinib ko'ring.");
+      }
+    });
+    const slider = document.createElement("span");
+    slider.className = "switch-slider";
+    label.appendChild(toggle);
+    label.appendChild(slider);
+    actions.appendChild(label);
+
+    const delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "schedule-del-btn";
+    delBtn.textContent = "🗑";
+    delBtn.addEventListener("click", () => deleteSchedule(item.id, row));
+    actions.appendChild(delBtn);
+
+    row.appendChild(actions);
+    scheduleListEl.appendChild(row);
+  }
+}
+
+async function updateSchedule(id, dayOfWeek, timeOfDay, enabled) {
+  try {
+    const res = await fetch(`/api/report_schedule/${id}/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        init_data: initData(),
+        day_of_week: dayOfWeek,
+        time_of_day: timeOfDay,
+        enabled,
+      }),
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function confirmDelete(message) {
+  return new Promise((resolve) => {
+    if (tg && tg.showConfirm) {
+      tg.showConfirm(message, (ok) => resolve(ok));
+    } else {
+      resolve(confirm(message));
+    }
+  });
+}
+
+async function deleteSchedule(id, row) {
+  const ok = await confirmDelete("Bu vaqtni o'chirmoqchimisiz?");
+  if (!ok) return;
+  try {
+    const res = await fetch(`/api/report_schedule/${id}/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ init_data: initData() }),
+    });
+    if (res.ok) {
+      row.remove();
+      if (!scheduleListEl.children.length) scheduleListEmptyEl.style.display = "block";
+    } else {
+      showMessage("O'chirishda xatolik yuz berdi.");
+    }
+  } catch (e) {
+    showMessage("Server bilan bog'lanishda xatolik.");
+  }
+}
+
+// ---------------- Yangi vaqt qo'shish ----------------
+
+const newDayPickerEl = document.getElementById("newDayPicker");
+const newHourSelect = document.getElementById("newHourSelect");
+const newMinuteSelect = document.getElementById("newMinuteSelect");
+const addBtn = document.getElementById("addBtn");
+
+fillTimeSelects(newHourSelect, newMinuteSelect);
+newHourSelect.value = "09";
+newMinuteSelect.value = "00";
+const newDayPicker = makeDayPicker(newDayPickerEl);
+
+async function addSchedule() {
+  addBtn.disabled = true;
+  addBtn.textContent = "⏳ Qo'shilmoqda...";
+  try {
+    const res = await fetch("/api/report_schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        init_data: initData(),
+        day_of_week: newDayPicker.value,
+        time_of_day: `${newHourSelect.value}:${newMinuteSelect.value}`,
+        enabled: true,
+      }),
+    });
+    if (res.ok) {
+      await loadSchedules();
+    } else {
+      showMessage("Xatolik yuz berdi. Qaytadan urinib ko'ring.");
+    }
+  } catch (e) {
+    showMessage("Server bilan bog'lanishda xatolik.");
+  } finally {
+    addBtn.disabled = false;
+    addBtn.textContent = "➕ Qo'shish";
+  }
+}
+
+addBtn.addEventListener("click", addSchedule);
+
+loadSchedules();
