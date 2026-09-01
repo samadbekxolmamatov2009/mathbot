@@ -956,6 +956,8 @@ async def get_user_coins(telegram_id: int) -> dict:
     """Foydalanuvchining tangalarini hisoblaydi:
     - davomat: har bir qatnashgan sessiya uchun flat 1 ball
     - test natijasi: har bir to'g'ri javob uchun 1 ball (test 'score' ustunidan)
+    - A+ natijasi: har bir to'g'ri javob uchun 1 ball (aplus_submissions 'score'
+      ustunidan) - oddiy testlar bilan bir xil tarzda ballga qo'shiladi
     - doimiy ishtirok: testlarni ketma-ket (o'tkazib yubormay) ishlash uchun
       streak bonusi (1, 2, 3, ...; bitta testni ishlamasa yana 1 dan boshlanadi).
       Faqat MUDDATI TUGAGAN testlar hisobga olinadi - hali ochiq (topshirish
@@ -988,6 +990,12 @@ async def get_user_coins(telegram_id: int) -> dict:
             test_coins = (await cursor.fetchone())[0]
 
         async with db.execute(
+            "SELECT COALESCE(SUM(score), 0) FROM aplus_submissions WHERE telegram_id = ?",
+            (telegram_id,),
+        ) as cursor:
+            aplus_coins = (await cursor.fetchone())[0]
+
+        async with db.execute(
             "SELECT COALESCE(SUM(delta), 0) FROM score_adjustments WHERE telegram_id = ?",
             (telegram_id,),
         ) as cursor:
@@ -1000,9 +1008,10 @@ async def get_user_coins(telegram_id: int) -> dict:
         "attendance_count": attendance_count,
         "attendance_coins": attendance_coins,
         "test_coins": test_coins,
+        "aplus_coins": aplus_coins,
         "test_streak_coins": test_streak_coins,
         "adjustment_coins": adjustment_coins,
-        "total": attendance_coins + test_coins + test_streak_coins + adjustment_coins,
+        "total": attendance_coins + test_coins + aplus_coins + test_streak_coins + adjustment_coins,
     }
 
 
@@ -1036,6 +1045,11 @@ async def get_leaderboard(limit: int = 50):
             test_scores = {row["telegram_id"]: row["total_score"] for row in await cursor.fetchall()}
 
         async with db.execute(
+            "SELECT telegram_id, SUM(score) AS total_score FROM aplus_submissions GROUP BY telegram_id"
+        ) as cursor:
+            aplus_scores = {row["telegram_id"]: row["total_score"] for row in await cursor.fetchall()}
+
+        async with db.execute(
             "SELECT telegram_id, SUM(delta) AS total_delta FROM score_adjustments GROUP BY telegram_id"
         ) as cursor:
             adjustments = {row["telegram_id"]: row["total_delta"] for row in await cursor.fetchall()}
@@ -1045,7 +1059,13 @@ async def get_leaderboard(limit: int = 50):
         tid = u["telegram_id"]
         attendance_coins = attendance_counts.get(tid, 0)
         test_streak_coins = _streak_bonus([(test_id, tid) in submitted_set for test_id in test_ids])
-        coins = attendance_coins + test_scores.get(tid, 0) + test_streak_coins + adjustments.get(tid, 0)
+        coins = (
+            attendance_coins
+            + test_scores.get(tid, 0)
+            + aplus_scores.get(tid, 0)
+            + test_streak_coins
+            + adjustments.get(tid, 0)
+        )
         leaderboard.append({"telegram_id": tid, "full_name": u["full_name"], "coins": coins})
 
     leaderboard.sort(key=lambda r: (-r["coins"], r["full_name"] or ""))
