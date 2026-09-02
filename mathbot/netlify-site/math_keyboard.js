@@ -127,8 +127,19 @@ function createMathKeyboard(mountEl) {
     }
   }
 
+  function focusInput(inputEl, toggleBtn) {
+    // Klaviatura ochiq bo'lsa, foydalanuvchi boshqa inputga to'g'ridan-to'g'ri
+    // (⌨ tugmasini bosmasdan) o'tganda ham, klaviatura O'SHA yangi inputga
+    // yozishni davom ettirishi uchun - hech qachon yashirmaydi, faqat
+    // "faol input"ni yangilaydi.
+    if (!root.hidden && activeInput !== inputEl) {
+      show(inputEl, toggleBtn);
+    }
+  }
+
   return {
     toggle,
+    focusInput,
     hide,
     get isOpen() {
       return !root.hidden;
