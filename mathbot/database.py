@@ -22,7 +22,8 @@ async def init_db():
                 district TEXT,
                 phone TEXT,
                 registered_at TEXT DEFAULT (datetime('now')),
-                is_registered INTEGER DEFAULT 0
+                is_registered INTEGER DEFAULT 0,
+                subscription_checked_at TEXT
             )
         """)
         await db.execute("""
@@ -95,7 +96,7 @@ async def init_db():
                 test_id INTEGER NOT NULL,
                 telegram_id INTEGER NOT NULL,
                 answers TEXT NOT NULL,
-                score REAL NOT NULL,
+                score INTEGER NOT NULL,
                 submitted_at TEXT DEFAULT (datetime('now')),
                 UNIQUE(test_id, telegram_id)
             )
@@ -121,56 +122,36 @@ async def init_db():
                 test_id INTEGER NOT NULL,
                 telegram_id INTEGER NOT NULL,
                 answers TEXT NOT NULL,
-                score REAL NOT NULL,
+                score INTEGER NOT NULL,
                 submitted_at TEXT DEFAULT (datetime('now')),
                 UNIQUE(test_id, telegram_id)
             )
         """)
-        # report_schedule dastlab bitta qatorli (id=1 CHECK) jadval edi - faqat
-        # bitta kun/vaqt saqlanardi. Endi bir nechta vaqt qo'shish (masalan bir
-        # kunda yoki haftada bir necha marta yuborish) imkoni uchun ko'p qatorli
-        # jadvalga o'tkazildi. Eski (production'da hali ham bo'lishi mumkin
-        # bo'lgan) sxema aniqlansa, mavjud yagona sozlama saqlab qolingan holda
-        # yangi sxemaga ko'chiriladi.
-        schedule_sql_cursor = await db.execute(
-            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'report_schedule'"
-        )
-        schedule_sql_row = await schedule_sql_cursor.fetchone()
-        existing_schedule_sql = schedule_sql_row[0] if schedule_sql_row else None
-
-        if existing_schedule_sql and "CHECK" in existing_schedule_sql:
-            await db.execute("ALTER TABLE report_schedule RENAME TO report_schedule_old")
-            await db.execute("""
-                CREATE TABLE report_schedule (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    day_of_week INTEGER NOT NULL,
-                    time_of_day TEXT NOT NULL,
-                    enabled INTEGER NOT NULL DEFAULT 1,
-                    last_fired_date TEXT,
-                    updated_by INTEGER,
-                    updated_at TEXT DEFAULT (datetime('now'))
-                )
-            """)
-            await db.execute("""
-                INSERT INTO report_schedule
-                    (day_of_week, time_of_day, enabled, last_fired_date, updated_by, updated_at)
-                SELECT day_of_week, time_of_day, enabled,
-                       substr(last_sent_at, 1, 10), updated_by, updated_at
-                FROM report_schedule_old
-            """)
-            await db.execute("DROP TABLE report_schedule_old")
-        else:
-            await db.execute("""
-                CREATE TABLE IF NOT EXISTS report_schedule (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    day_of_week INTEGER NOT NULL,
-                    time_of_day TEXT NOT NULL,
-                    enabled INTEGER NOT NULL DEFAULT 1,
-                    last_fired_date TEXT,
-                    updated_by INTEGER,
-                    updated_at TEXT DEFAULT (datetime('now'))
-                )
-            """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS broadcast_schedule (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                message TEXT NOT NULL,
+                day_of_week INTEGER NOT NULL,
+                time_of_day TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                updated_by INTEGER,
+                updated_at TEXT DEFAULT (datetime('now')),
+                last_sent_week TEXT,
+                file_data TEXT,
+                file_name TEXT
+            )
+        """)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS report_schedule (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                day_of_week INTEGER NOT NULL DEFAULT 0,
+                time_of_day TEXT NOT NULL DEFAULT '09:00',
+                enabled INTEGER NOT NULL DEFAULT 0,
+                last_sent_at TEXT,
+                updated_by INTEGER,
+                updated_at TEXT DEFAULT (datetime('now'))
+            )
+        """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS admins (
                 telegram_id INTEGER PRIMARY KEY,
@@ -193,14 +174,18 @@ async def init_db():
             )
         """)
 
-        # Eski bazalarda ba'zi ustunlar bo'lmasligi mumkin - CREATE TABLE IF
-        # NOT EXISTS eski jadvalni o'zgartirmaydi, shuning uchun ustunlarni
-        # alohida qo'shishga harakat qilamiz (allaqachon bo'lsa, xato
-        # e'tiborsiz qoldiriladi).
+        # Eski (migratsiyadan oldin yaratilgan) bazalarda broadcast_schedule
+        # jadvalida file_data/file_name ustunlari bo'lmasligi mumkin - CREATE
+        # TABLE IF NOT EXISTS eski jadvalni o'zgartirmaydi, shuning uchun
+        # ustunlarni alohida qo'shishga harakat qilamiz (allaqachon bo'lsa,
+        # xato e'tiborsiz qoldiriladi).
         for column_sql in (
+            "ALTER TABLE broadcast_schedule ADD COLUMN file_data TEXT",
+            "ALTER TABLE broadcast_schedule ADD COLUMN file_name TEXT",
             "ALTER TABLE tests ADD COLUMN notified INTEGER DEFAULT 0",
             "ALTER TABLE aplus_tests ADD COLUMN notified INTEGER DEFAULT 0",
             "ALTER TABLE special_tasks ADD COLUMN notified INTEGER DEFAULT 0",
+            "ALTER TABLE users ADD COLUMN subscription_checked_at TEXT",
         ):
             try:
                 await db.execute(column_sql)
@@ -234,6 +219,25 @@ async def get_user(telegram_id: int):
 async def is_user_registered(telegram_id: int) -> bool:
     user = await get_user(telegram_id)
     return bool(user and user["is_registered"])
+
+
+async def reset_user_registration(telegram_id: int):
+    """Foydalanuvchini butunlay 'ro'yxatdan chiqargan' holatga qaytaradi -
+    kanaldan chiqarib yuborilgan (obunasi bekor qilingan) foydalanuvchilar
+    uchun ishlatiladi. Keyingi /start'da butun ro'yxatdan o'tish jarayonini
+    boshidan o'tishga to'g'ri keladi."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM users WHERE telegram_id = ?", (telegram_id,))
+        await db.commit()
+
+
+async def update_subscription_check(telegram_id: int, checked_at: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE users SET subscription_checked_at = ? WHERE telegram_id = ?",
+            (checked_at, telegram_id),
+        )
+        await db.commit()
 
 
 # ---------- Adminlar (dinamik boshqariladigan) ----------
@@ -403,9 +407,9 @@ async def create_attendance_session(code: str, warning_minutes: int, report_minu
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE attendance_sessions SET is_active = 0 WHERE is_active = 1")
         cursor = await db.execute(
-            """INSERT INTO attendance_sessions (code, created_at, warning_minutes, report_minutes)
-               VALUES (?, ?, ?, ?)""",
-            (code, now_tashkent_str("%Y-%m-%d %H:%M:%S"), warning_minutes, report_minutes),
+            """INSERT INTO attendance_sessions (code, warning_minutes, report_minutes)
+               VALUES (?, ?, ?)""",
+            (code, warning_minutes, report_minutes),
         )
         await db.commit()
         return cursor.lastrowid
@@ -509,35 +513,15 @@ async def get_consecutive_miss_streak(telegram_id: int) -> int:
     return streak
 
 
-ATTENDANCE_MATRIX_RESET_KEY = "attendance_matrix_reset_at"
-
-
 async def get_attendance_matrix():
     """Barcha davomat sessiyalari, barcha ro'yxatdan o'tgan foydalanuvchilar va
-    kim qaysi sessiyada qatnashgani (session_id, telegram_id) juftliklari to'plami.
-
-    Agar admin/boss "🔄 Davomatni yangilash" tugmasini bosgan bo'lsa
-    (qarang: reset_attendance_matrix), faqat o'shandan keyin boshlangan
-    sessiyalar qaytariladi - shu orqali PDF jadval vaqt o'tishi bilan cheksiz
-    kengayib, hajmi oshib ketmaydi. Bu tangalar yoki davomat tarixining o'ziga
-    (attendance_records, get_user_coins) hech qanday ta'sir qilmaydi - faqat
-    shu jadval hisobotining ko'rinishini qisqartiradi."""
-    reset_at = await get_setting(ATTENDANCE_MATRIX_RESET_KEY)
-
+    kim qaysi sessiyada qatnashgani (session_id, telegram_id) juftliklari to'plami."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
-        if reset_at:
-            async with db.execute(
-                """SELECT id, code, created_at FROM attendance_sessions
-                   WHERE created_at > ? ORDER BY id ASC""",
-                (reset_at,),
-            ) as cursor:
-                sessions = await cursor.fetchall()
-        else:
-            async with db.execute(
-                "SELECT id, code, created_at FROM attendance_sessions ORDER BY id ASC"
-            ) as cursor:
-                sessions = await cursor.fetchall()
+        async with db.execute(
+            "SELECT id, code, created_at FROM attendance_sessions ORDER BY id ASC"
+        ) as cursor:
+            sessions = await cursor.fetchall()
 
         async with db.execute(
             """SELECT telegram_id, full_name, registered_at FROM users
@@ -551,16 +535,6 @@ async def get_attendance_matrix():
             attended_set = {(row["session_id"], row["telegram_id"]) for row in await cursor.fetchall()}
 
     return sessions, users, attended_set
-
-
-async def reset_attendance_matrix():
-    """Davomat JADVALI (PDF matritsasi) ko'rinishini "yangi sahifadan"
-    boshlaydi - shu paytgacha bo'lgan sessiyalar endi jadvalda
-    ko'rsatilmaydi. DIQQAT: attendance_records o'zi o'chirilmaydi, shuning
-    uchun tangalar va davomat tarixi (get_user_coins, ketma-ket
-    qatnashmaslik hisobi) o'zgarishsiz qoladi - faqat "📊 Jadvalni ko'rish"
-    hisobotining hajmini cheklash uchun."""
-    await set_setting(ATTENDANCE_MATRIX_RESET_KEY, now_tashkent_str("%Y-%m-%d %H:%M:%S"))
 
 
 async def set_pending_absence_reason(telegram_id: int, session_id: int):
@@ -761,21 +735,6 @@ async def get_user_test_results(telegram_id: int):
             return await cursor.fetchall()
 
 
-async def get_user_aplus_results(telegram_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            """SELECT at.name, at.code, at.question_count * 2 AS total_questions,
-                      aps.score, aps.submitted_at
-               FROM aplus_submissions aps
-               JOIN aplus_tests at ON at.id = aps.test_id
-               WHERE aps.telegram_id = ?
-               ORDER BY aps.submitted_at ASC""",
-            (telegram_id,),
-        ) as cursor:
-            return await cursor.fetchall()
-
-
 async def save_test_submission(test_id: int, telegram_id: int, answers: dict, score: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
@@ -784,30 +743,6 @@ async def save_test_submission(test_id: int, telegram_id: int, answers: dict, sc
                ON CONFLICT(test_id, telegram_id) DO NOTHING""",
             (test_id, telegram_id, json.dumps(answers), score),
         )
-        await db.commit()
-
-
-async def get_test_submissions_for_scoring(test_id: int):
-    """id, answers, score - ustoz javob kalitini to'g'irlaganda ballarni
-    qayta hisoblash uchun."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT id, answers, score FROM test_submissions WHERE test_id = ?",
-            (test_id,),
-        ) as cursor:
-            return await cursor.fetchall()
-
-
-async def update_test_submission_scores(updates):
-    """updates: [(submission_id, yangi_ball), ...] - qayta hisoblangan
-    ballarni bazaga yozadi (shu orqali tangalar ham to'g'rilanadi)."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        for submission_id, score in updates:
-            await db.execute(
-                "UPDATE test_submissions SET score = ? WHERE id = ?",
-                (score, submission_id),
-            )
         await db.commit()
 
 
@@ -945,29 +880,6 @@ async def save_aplus_submission(test_id: int, telegram_id: int, answers: dict, s
         await db.commit()
 
 
-async def get_aplus_submissions_for_scoring(test_id: int):
-    """id, answers, score - ustoz javob kalitini to'g'irlaganda ballarni
-    qayta hisoblash uchun."""
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT id, answers, score FROM aplus_submissions WHERE test_id = ?",
-            (test_id,),
-        ) as cursor:
-            return await cursor.fetchall()
-
-
-async def update_aplus_submission_scores(updates):
-    """updates: [(submission_id, yangi_ball), ...]"""
-    async with aiosqlite.connect(DB_PATH) as db:
-        for submission_id, score in updates:
-            await db.execute(
-                "UPDATE aplus_submissions SET score = ? WHERE id = ?",
-                (score, submission_id),
-            )
-        await db.commit()
-
-
 # ---------- Tangalar (davomat + test ballaridan hisoblanadi) ----------
 
 def _streak_bonus(flags) -> int:
@@ -990,13 +902,8 @@ async def get_user_coins(telegram_id: int) -> dict:
     """Foydalanuvchining tangalarini hisoblaydi:
     - davomat: har bir qatnashgan sessiya uchun flat 1 ball
     - test natijasi: har bir to'g'ri javob uchun 1 ball (test 'score' ustunidan)
-    - A+ natijasi: har bir to'g'ri javob uchun 1 ball (aplus_submissions 'score'
-      ustunidan) - oddiy testlar bilan bir xil tarzda ballga qo'shiladi
     - doimiy ishtirok: testlarni ketma-ket (o'tkazib yubormay) ishlash uchun
-      streak bonusi (1, 2, 3, ...; bitta testni ishlamasa yana 1 dan boshlanadi).
-      Faqat MUDDATI TUGAGAN testlar hisobga olinadi - hali ochiq (topshirish
-      vaqti tugamagan) test hech kim topshirmagan bo'lsa ham "o'tkazib
-      yuborilgan" deb hisoblanmasligi kerak.
+      streak bonusi (1, 2, 3, ...; bitta testni ishlamasa yana 1 dan boshlanadi)
     """
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
@@ -1006,8 +913,7 @@ async def get_user_coins(telegram_id: int) -> dict:
             attendance_count = (await cursor.fetchone())[0]
 
         async with db.execute(
-            "SELECT id FROM tests WHERE end_time IS NOT NULL AND end_time <= ? ORDER BY id ASC",
-            (now_tashkent_str(),),
+            "SELECT id FROM tests ORDER BY id ASC"
         ) as cursor:
             test_ids = [row[0] for row in await cursor.fetchall()]
 
@@ -1024,12 +930,6 @@ async def get_user_coins(telegram_id: int) -> dict:
             test_coins = (await cursor.fetchone())[0]
 
         async with db.execute(
-            "SELECT COALESCE(SUM(score), 0) FROM aplus_submissions WHERE telegram_id = ?",
-            (telegram_id,),
-        ) as cursor:
-            aplus_coins = (await cursor.fetchone())[0]
-
-        async with db.execute(
             "SELECT COALESCE(SUM(delta), 0) FROM score_adjustments WHERE telegram_id = ?",
             (telegram_id,),
         ) as cursor:
@@ -1042,10 +942,9 @@ async def get_user_coins(telegram_id: int) -> dict:
         "attendance_count": attendance_count,
         "attendance_coins": attendance_coins,
         "test_coins": test_coins,
-        "aplus_coins": aplus_coins,
         "test_streak_coins": test_streak_coins,
         "adjustment_coins": adjustment_coins,
-        "total": attendance_coins + test_coins + aplus_coins + test_streak_coins + adjustment_coins,
+        "total": attendance_coins + test_coins + test_streak_coins + adjustment_coins,
     }
 
 
@@ -1063,8 +962,7 @@ async def get_leaderboard(limit: int = 50):
             attendance_counts = {row["telegram_id"]: row["cnt"] for row in await cursor.fetchall()}
 
         async with db.execute(
-            "SELECT id FROM tests WHERE end_time IS NOT NULL AND end_time <= ? ORDER BY id ASC",
-            (now_tashkent_str(),),
+            "SELECT id FROM tests ORDER BY id ASC"
         ) as cursor:
             test_ids = [row[0] for row in await cursor.fetchall()]
 
@@ -1079,11 +977,6 @@ async def get_leaderboard(limit: int = 50):
             test_scores = {row["telegram_id"]: row["total_score"] for row in await cursor.fetchall()}
 
         async with db.execute(
-            "SELECT telegram_id, SUM(score) AS total_score FROM aplus_submissions GROUP BY telegram_id"
-        ) as cursor:
-            aplus_scores = {row["telegram_id"]: row["total_score"] for row in await cursor.fetchall()}
-
-        async with db.execute(
             "SELECT telegram_id, SUM(delta) AS total_delta FROM score_adjustments GROUP BY telegram_id"
         ) as cursor:
             adjustments = {row["telegram_id"]: row["total_delta"] for row in await cursor.fetchall()}
@@ -1093,69 +986,108 @@ async def get_leaderboard(limit: int = 50):
         tid = u["telegram_id"]
         attendance_coins = attendance_counts.get(tid, 0)
         test_streak_coins = _streak_bonus([(test_id, tid) in submitted_set for test_id in test_ids])
-        coins = (
-            attendance_coins
-            + test_scores.get(tid, 0)
-            + aplus_scores.get(tid, 0)
-            + test_streak_coins
-            + adjustments.get(tid, 0)
-        )
+        coins = attendance_coins + test_scores.get(tid, 0) + test_streak_coins + adjustments.get(tid, 0)
         leaderboard.append({"telegram_id": tid, "full_name": u["full_name"], "coins": coins})
 
     leaderboard.sort(key=lambda r: (-r["coins"], r["full_name"] or ""))
     return leaderboard[:limit]
 
 
-# ---------- Haftalik hisobot rejasi (haqiqiy test natijalari asosida) ----------
+# ---------- Rejalashtirilgan xabar (haftalik broadcast) ----------
 
-async def get_report_schedules():
-    """Barcha hisobot jadval yozuvlarini qaytaradi (bir nechta kun/vaqt
-    bo'lishi mumkin - masalan bir kunda yoki haftada bir necha marta
-    yuborish uchun)."""
+async def get_broadcast_schedule():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM report_schedule ORDER BY day_of_week ASC, time_of_day ASC"
+            "SELECT * FROM broadcast_schedule WHERE id = 1"
         ) as cursor:
-            return await cursor.fetchall()
+            return await cursor.fetchone()
 
 
-async def add_report_schedule(day_of_week: int, time_of_day: str, enabled: bool, updated_by: int) -> int:
+async def save_broadcast_schedule(
+    message: str, day_of_week: int, time_of_day: str, enabled: bool, updated_by: int
+):
+    """Sozlamalar har safar saqlanganda `last_sent_week` ni ham tozalaydi —
+    aks holda admin xabar/vaqtni o'zgartirsa ham, shu hafta uchun "allaqachon
+    yuborilgan" deb hisoblanib, yangi sozlama hech qachon jo'natilmasdi."""
     async with aiosqlite.connect(DB_PATH) as db:
-        cursor = await db.execute(
-            """INSERT INTO report_schedule (day_of_week, time_of_day, enabled, updated_by, updated_at)
-               VALUES (?, ?, ?, ?, datetime('now'))""",
+        await db.execute(
+            """INSERT INTO broadcast_schedule
+                   (id, message, day_of_week, time_of_day, enabled, updated_by, updated_at, last_sent_week)
+               VALUES (1, ?, ?, ?, ?, ?, datetime('now'), NULL)
+               ON CONFLICT(id) DO UPDATE SET
+                   message = excluded.message,
+                   day_of_week = excluded.day_of_week,
+                   time_of_day = excluded.time_of_day,
+                   enabled = excluded.enabled,
+                   updated_by = excluded.updated_by,
+                   last_sent_week = NULL,
+                   updated_at = excluded.updated_at""",
+            (message, day_of_week, time_of_day, int(enabled), updated_by),
+        )
+        await db.commit()
+
+
+async def mark_broadcast_sent(week_key: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE broadcast_schedule SET last_sent_week = ? WHERE id = 1", (week_key,)
+        )
+        await db.commit()
+
+
+async def set_broadcast_schedule_file(file_data: str | None, file_name: str | None, updated_by: int):
+    """Rejalashtirilgan xabarga PDF (yoki boshqa fayl) biriktiradi/olib tashlaydi
+    (file_data=None bo'lsa - olib tashlash). Agar hali umuman sozlama
+    saqlanmagan bo'lsa (birinchi marta), bo'sh qiymatlar bilan qator yaratadi -
+    admin keyinroq matn/kun/vaqtni "⚙️ Sozlamalar"dan to'ldirishi mumkin."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO broadcast_schedule
+                   (id, message, day_of_week, time_of_day, enabled, updated_by, updated_at, file_data, file_name)
+               VALUES (1, '', 0, '09:00', 0, ?, datetime('now'), ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                   file_data = excluded.file_data,
+                   file_name = excluded.file_name,
+                   updated_by = excluded.updated_by,
+                   updated_at = excluded.updated_at""",
+            (updated_by, file_data, file_name),
+        )
+        await db.commit()
+
+
+# ---------- Haftalik hisobot rejasi (haqiqiy test natijalari asosida) ----------
+
+async def get_report_schedule():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM report_schedule WHERE id = 1"
+        ) as cursor:
+            return await cursor.fetchone()
+
+
+async def save_report_schedule(day_of_week: int, time_of_day: str, enabled: bool, updated_by: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO report_schedule
+                   (id, day_of_week, time_of_day, enabled, updated_by, updated_at)
+               VALUES (1, ?, ?, ?, ?, datetime('now'))
+               ON CONFLICT(id) DO UPDATE SET
+                   day_of_week = excluded.day_of_week,
+                   time_of_day = excluded.time_of_day,
+                   enabled = excluded.enabled,
+                   updated_by = excluded.updated_by,
+                   updated_at = excluded.updated_at""",
             (day_of_week, time_of_day, int(enabled), updated_by),
         )
         await db.commit()
-        return cursor.lastrowid
 
 
-async def update_report_schedule(
-    schedule_id: int, day_of_week: int, time_of_day: str, enabled: bool, updated_by: int
-):
+async def mark_report_sent(sent_at_iso: str):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """UPDATE report_schedule
-               SET day_of_week = ?, time_of_day = ?, enabled = ?, updated_by = ?,
-                   updated_at = datetime('now')
-               WHERE id = ?""",
-            (day_of_week, time_of_day, int(enabled), updated_by, schedule_id),
-        )
-        await db.commit()
-
-
-async def delete_report_schedule(schedule_id: int):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("DELETE FROM report_schedule WHERE id = ?", (schedule_id,))
-        await db.commit()
-
-
-async def mark_report_schedule_fired(schedule_id: int, fired_date: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE report_schedule SET last_fired_date = ? WHERE id = ?",
-            (fired_date, schedule_id),
+            "UPDATE report_schedule SET last_sent_at = ? WHERE id = 1", (sent_at_iso,)
         )
         await db.commit()
 
