@@ -61,6 +61,11 @@ COURSES = {
     },
 }
 
+# Ro'yxatdan o'tishdan oldin foydalanuvchi shu kanalga OBUNA bo'lgan bo'lishi
+# SHART (bot shu kanalda admin bo'lishi kerak, aks holda obunani tekshira
+# olmaydi). "@" bilan yoki kanal ID (-100...) bilan yozish mumkin.
+REQUIRED_SUBSCRIPTION_CHANNEL = "@turbomathka"
+
 # "Adminga xabar" tugmasidagi standart havola - Boss "🔗 Admin havolasini
 # o'zgartirish" tugmasi orqali bazada saqlangan qiymat bilan buni
 # almashtirishi mumkin (database.py: get_setting/set_setting). Bu shunchaki
