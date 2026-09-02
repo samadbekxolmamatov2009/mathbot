@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import logging
 import os
 import tempfile
@@ -7,7 +8,7 @@ from datetime import datetime, timedelta
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import FSInputFile
+from aiogram.types import BufferedInputFile, FSInputFile
 from aiohttp import web
 
 import config
@@ -40,6 +41,7 @@ async def keep_webapp_alive_loop():
 import database as db
 from database import init_db
 from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
+from middlewares import SubscriptionCheckMiddleware
 from pdf_report import generate_period_report, generate_test_results_report
 from quiz_structure import DEFAULT_TOTAL_QUESTIONS
 from timezone_utils import now_tashkent
@@ -47,6 +49,7 @@ from webapp.server import create_app
 
 REPORT_PATH = os.path.join(tempfile.gettempdir(), "mathbot_haftalik_hisobot.pdf")
 TEST_REPORT_CHECK_INTERVAL = 60
+BROADCAST_CHECK_INTERVAL = 30
 REPORT_SCHEDULE_CHECK_INTERVAL = 30
 NOTIFY_CHECK_INTERVAL = 20
 
@@ -59,49 +62,27 @@ DIRECTION_LABELS = {
 
 async def send_report_schedule_loop(bot: Bot):
     """Haftalik hisobot PDF'ini "⚙️ Sozlamalar"da (Boss/admin tomonidan)
-    belgilangan kun/vaqt(lar)da, real test natijalari asosida hisoblab,
-    kanalga yuboradi. Bir nechta kun/vaqt yozuvi bo'lishi mumkin (masalan bir
-    kunda yoki haftada bir necha marta yuborish uchun) - har biri mustaqil
-    "signal" sifatida tekshiriladi. Hisobot MAZMUNI ("oxirgi yuborilgandan
-    beri" oralig'i) esa yozuvlardan mustaqil, umumiy "last_report_sent_at"
-    sozlamasi orqali kuzatiladi - shunda bir kunda ikkita yozuv ketma-ket
-    ishga tushsa ham, ikkinchisi faqat BIRINCHISIDAN keyingi yangi
-    natijalarni o'z ichiga oladi (takrorlanish bo'lmaydi)."""
+    belgilangan kun/vaqtda, real test natijalari asosida hisoblab, kanalga
+    yuboradi. Har soatda emas - faqat belgilangan kun/vaqtda, va faqat
+    oldingi hisobotdan keyin topshirilgan natijalarni hisobga oladi."""
     while True:
         try:
-            schedules = await db.get_report_schedules()
-            now = now_tashkent()
-            if schedules:
-                logging.info(
-                    "Hisobot tekshiruvi: %d ta jadval | hozir kun=%s vaqt=%s",
-                    len(schedules),
-                    now.weekday(),
-                    now.strftime("%H:%M"),
+            schedule = await db.get_report_schedule()
+            if schedule and schedule["enabled"]:
+                now = now_tashkent()
+                current_week = now.strftime("%G-W%V")
+                last_sent_at = schedule["last_sent_at"]
+                last_sent_week = (
+                    datetime.fromisoformat(last_sent_at).strftime("%G-W%V")
+                    if last_sent_at
+                    else None
                 )
-            else:
-                logging.info("Hisobot tekshiruvi: schedule=None hozir=%s", now.strftime("%H:%M"))
-
-            for schedule in schedules:
-                if not schedule["enabled"]:
-                    continue
-
-                last_fired_date = schedule["last_fired_date"]
-                # Aniq daqiqa ("==") emas, "vaqt allaqachon yetdi" ("<=")
-                # tekshiriladi - aks holda tsikl aynan shu daqiqaga to'g'ri
-                # kelmay qolsa (bot qayta ishga tushib qolsa yoki biroz
-                # kechiksa), hisobot butun haftaga tushib qolardi. Shu
-                # YOZUVNING o'zi bir kunda bir martadan ortiq ishga
-                # tushmasligi uchun faqat shu yozuvning last_fired_date'i
-                # solishtiriladi - boshqa yozuvlarga ta'sir qilmaydi, ya'ni
-                # bir kunga bir nechta yozuv qo'yilsa, har biri o'z vaqtida
-                # alohida yuboraveradi.
                 if (
                     now.weekday() == schedule["day_of_week"]
-                    and now.strftime("%H:%M") >= schedule["time_of_day"]
-                    and last_fired_date != now.strftime("%Y-%m-%d")
+                    and now.strftime("%H:%M") == schedule["time_of_day"]
+                    and last_sent_week != current_week
                 ):
                     try:
-                        last_sent_at = await db.get_setting("last_report_sent_at")
                         since_iso = last_sent_at or ""
                         since_dt = (
                             datetime.fromisoformat(last_sent_at)
@@ -112,9 +93,7 @@ async def send_report_schedule_loop(bot: Bot):
                         generate_period_report(REPORT_PATH, rows, since_dt, now)
                         channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
                         await bot.send_document(channel, FSInputFile(REPORT_PATH))
-                        sent_at_iso = now.strftime("%Y-%m-%dT%H:%M:%S")
-                        await db.set_setting("last_report_sent_at", sent_at_iso)
-                        await db.mark_report_schedule_fired(schedule["id"], now.strftime("%Y-%m-%d"))
+                        await db.mark_report_sent(now.strftime("%Y-%m-%dT%H:%M:%S"))
                     except Exception:
                         logging.exception("Haftalik hisobotni kanalga yuborishda xatolik yuz berdi")
         except Exception:
@@ -221,6 +200,42 @@ async def notify_new_activities_loop(bot: Bot):
         await asyncio.sleep(NOTIFY_CHECK_INTERVAL)
 
 
+async def send_broadcast_schedule_loop(bot: Bot):
+    """Rejalashtirilgan xabarni belgilangan kun/vaqtda kanalga yuboradi
+    (har bir foydalanuvchiga alohida emas - "⚙️ Sozlamalar" orqali admin
+    belgilagan kun/vaqtda, biriktirilgan fayl (masalan PDF) bo'lsa hujjat
+    sifatida, bo'lmasa oddiy matn sifatida, sozlamalardagi kanalga)."""
+    while True:
+        try:
+            schedule = await db.get_broadcast_schedule()
+            if schedule and schedule["enabled"]:
+                now = now_tashkent()
+                current_week = now.strftime("%G-W%V")
+                if (
+                    now.weekday() == schedule["day_of_week"]
+                    and now.strftime("%H:%M") == schedule["time_of_day"]
+                    and schedule["last_sent_week"] != current_week
+                ):
+                    channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
+                    try:
+                        file_data = schedule["file_data"]
+                        if file_data:
+                            file_bytes = base64.b64decode(file_data)
+                            file_name = schedule["file_name"] or "fayl.pdf"
+                            document = BufferedInputFile(file_bytes, filename=file_name)
+                            await bot.send_document(
+                                channel, document, caption=(schedule["message"] or None)
+                            )
+                        else:
+                            await bot.send_message(channel, schedule["message"])
+                    except Exception:
+                        logging.exception("Rejalashtirilgan xabarni kanalga yuborishda xatolik")
+                    await db.mark_broadcast_sent(current_week)
+        except Exception:
+            logging.exception("Rejalashtirilgan xabarni yuborishda xatolik yuz berdi")
+        await asyncio.sleep(BROADCAST_CHECK_INTERVAL)
+
+
 async def start_webapp_server():
     """Test Mini App uchun aiohttp serverni fon rejimida ishga tushiradi."""
     app = create_app()
@@ -243,6 +258,13 @@ async def main():
 
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
+
+    # Ro'yxatdan o'tgan foydalanuvchilarning kanal obunasini davomiy
+    # tekshiradi - kanaldan chiqarib yuborilganlarni avtomatik "ro'yxatdan
+    # chiqaradi" (qarang: middlewares.py).
+    subscription_middleware = SubscriptionCheckMiddleware()
+    dp.message.middleware(subscription_middleware)
+    dp.callback_query.middleware(subscription_middleware)
 
     await admin.set_admin_menu(bot)
     await admin.set_boss_menu(bot)
@@ -267,6 +289,7 @@ async def main():
     asyncio.create_task(send_report_schedule_loop(bot))
     asyncio.create_task(send_test_results_loop(bot))
     asyncio.create_task(send_aplus_results_loop(bot))
+    asyncio.create_task(send_broadcast_schedule_loop(bot))
     asyncio.create_task(notify_new_activities_loop(bot))
     await dp.start_polling(bot)
 
