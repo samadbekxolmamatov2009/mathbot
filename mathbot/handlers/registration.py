@@ -38,7 +38,7 @@ import os
 from aiogram.types import FSInputFile
 
 WELCOME_STICKER_FILE_ID = (
-    "CAACAgIAAxkBAAID8WqEPP6ypYIZMHQNZdoiPD-zPvdbAAJCAAMnFEkLruH2y45Rc_g9BA"
+    "CAACAgIAAxkBAAIJCGqYQfFLh6kYEbTcdbEbW_lHKKfLAAIhDAACWngGAAGqAAHjcMwHjQw9BA"
 )
 
 # Agar stiker o'rniga oddiy rasm (jpg/png) yuborishni xohlasangiz - shu nomdagi
