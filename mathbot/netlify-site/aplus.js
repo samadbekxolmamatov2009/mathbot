@@ -66,15 +66,8 @@ function showTestName(name) {
   }
 }
 
-function showLateWarning(endTime) {
-  const timeLabel = endTime ? formatDateTime(endTime) : "";
-  els.lateWarning.textContent = timeLabel
-    ? `⏰ Test vaqti ${timeLabel} da tugagan — javob berishingiz mumkin, ammo natija 75% hisoblanadi.`
-    : "⏰ Test vaqti tugagan — javob berishingiz mumkin, ammo natija 75% hisoblanadi.";
+function showLateWarning() {
   els.lateWarning.hidden = false;
-  setTimeout(() => {
-    els.lateWarning.hidden = true;
-  }, 2000);
 }
 
 function showInfo(icon, text) {
@@ -125,6 +118,11 @@ function renderQuestions() {
     kbdBtn.textContent = "⌨";
     kbdBtn.addEventListener("click", () => mathKeyboard.toggle(input, kbdBtn));
     row.appendChild(kbdBtn);
+
+    // Foydalanuvchi ⌨ tugmasini bosmasdan, to'g'ridan-to'g'ri boshqa
+    // inputga o'tsa (masalan 1a'dan 1b'ga) ham, klaviatura ochiq bo'lsa -
+    // shu yangi inputga "ergashadi".
+    input.addEventListener("focus", () => mathKeyboard.focusInput(input, kbdBtn));
 
     frag.appendChild(row);
   });
@@ -281,7 +279,7 @@ async function init() {
     }
 
     if (data.window_status === "ended") {
-      showLateWarning(data.end_time);
+      showLateWarning();
     }
 
     fields = data.fields || [];
