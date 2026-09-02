@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import re
 
 from aiogram import Router, F
@@ -8,11 +9,13 @@ from aiogram.types import (
     Message,
     CallbackQuery,
     ReplyKeyboardRemove,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
 )
 
 import database as db
 from states import Registration
-from config import COURSES, is_admin, is_boss
+from config import COURSES, REQUIRED_SUBSCRIPTION_CHANNEL, is_admin, is_boss
 from keyboards import (
     role_keyboard,
     courses_keyboard,
@@ -30,8 +33,20 @@ router.callback_query.filter(F.message.chat.type == "private")
 
 PHONE_RE = re.compile(r"^\+998\d{9}$")
 
+import os
+
+from aiogram.types import FSInputFile
+
 WELCOME_STICKER_FILE_ID = (
-    "CAACAgIAAxkBAAIFj2qUUqBXgxkLpd1EQXTtt2nnTtjbAAIhDAACWngGAAGqAAHjcMwHjQw9BA"
+    "CAACAgIAAxkBAAID8WqEPP6ypYIZMHQNZdoiPD-zPvdbAAJCAAMnFEkLruH2y45Rc_g9BA"
+)
+
+# Agar stiker o'rniga oddiy rasm (jpg/png) yuborishni xohlasangiz - shu nomdagi
+# faylni "mathbot/assets/welcome.jpg" (yoki .png) sifatida repo'ga qo'shing.
+# Fayl topilsa, u stiker o'rniga avtomatik yuboriladi (stikerga umuman
+# tegilmaydi). Fayl bo'lmasa - yuqoridagi WELCOME_STICKER_FILE_ID ishlatiladi.
+WELCOME_IMAGE_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "assets", "welcome.jpg"
 )
 
 
@@ -39,6 +54,84 @@ def progress(step: int, total: int = 7) -> str:
     filled = "\u25cf" * step
     empty = "\u25cb" * (total - step)
     return f"{filled}{empty}  ({step}/{total})"
+
+
+# ---------- Kanalga obuna tekshiruvi ----------
+
+async def _is_subscribed(bot, user_id: int) -> bool:
+    """Foydalanuvchi REQUIRED_SUBSCRIPTION_CHANNEL kanaliga obuna ekanini
+    tekshiradi. Bot o'sha kanalda admin bo'lishi shart - aks holda (yoki
+    boshqa texnik xato bo'lsa) ro'yxatdan o'tishni butunlay bloklab
+    qo'ymaslik uchun xavfsiz tomonga (obuna deb hisoblab) o'tamiz, xatoni
+    esa logga yozamiz."""
+    try:
+        member = await bot.get_chat_member(REQUIRED_SUBSCRIPTION_CHANNEL, user_id)
+        return member.status not in ("left", "kicked")
+    except Exception:
+        logging.exception(
+            "Obuna tekshiruvida xatolik (kanal: %s, user: %s)",
+            REQUIRED_SUBSCRIPTION_CHANNEL,
+            user_id,
+        )
+        return True
+
+
+def _subscription_gate_keyboard() -> InlineKeyboardMarkup:
+    channel = REQUIRED_SUBSCRIPTION_CHANNEL
+    url = f"https://t.me/{channel.lstrip('@')}" if channel.startswith("@") else channel
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url=url)],
+            [InlineKeyboardButton(text="✅ Obuna bo'ldim, tekshirish", callback_data="check_subscription")],
+        ]
+    )
+
+
+async def _send_subscription_gate(message: Message):
+    await message.answer(
+        "Ro'yxatdan o'tishdan oldin, iltimos, avval bizning rasmiy kanalimizga "
+        "obuna bo'ling.\n\nObuna bo'lgach, pastdagi \"✅ Obuna bo'ldim\" tugmasini bosing.",
+        reply_markup=_subscription_gate_keyboard(),
+    )
+
+
+async def _begin_registration(bot, chat_id: int, user_id: int, state: FSMContext):
+    await db.start_registration(user_id)
+    await state.set_state(Registration.waiting_role)
+    try:
+        if os.path.isfile(WELCOME_IMAGE_PATH):
+            await bot.send_photo(chat_id, FSInputFile(WELCOME_IMAGE_PATH))
+        else:
+            await bot.send_sticker(chat_id, WELCOME_STICKER_FILE_ID)
+    except Exception:
+        pass
+    await bot.send_message(
+        chat_id,
+        "\U0001F44B <b>Assalomu alaykum!</b>\n\n"
+        "Ro'yxatdan o'tish uchun bir necha savolga javob bering.\n\n"
+        f"{progress(1)}\n"
+        "\U0001F393 Siz o'quvchimisiz yoki o'qituvchimisiz?",
+        parse_mode="HTML",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+    await bot.send_message(chat_id, "Tanlang:", reply_markup=role_keyboard())
+
+
+@router.callback_query(F.data == "check_subscription")
+async def cb_check_subscription(callback: CallbackQuery, state: FSMContext):
+    if not await _is_subscribed(callback.bot, callback.from_user.id):
+        await callback.answer(
+            "Hali obuna bo'lmagansiz. Obuna bo'lib, qaytadan urinib ko'ring.",
+            show_alert=True,
+        )
+        return
+
+    await callback.answer("✅ Obuna tasdiqlandi!")
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await _begin_registration(callback.bot, callback.message.chat.id, callback.from_user.id, state)
 
 
 # ---------- /start ----------
@@ -69,21 +162,11 @@ async def cmd_start(message: Message, state: FSMContext):
         )
         return
 
-    await db.start_registration(message.from_user.id)
-    await state.set_state(Registration.waiting_role)
-    try:
-        await message.answer_sticker(WELCOME_STICKER_FILE_ID)
-    except Exception:
-        pass
-    await message.answer(
-        "\U0001F44B <b>Assalomu alaykum!</b>\n\n"
-        "Ro'yxatdan o'tish uchun bir necha savolga javob bering.\n\n"
-        f"{progress(1)}\n"
-        "\U0001F393 Siz o'quvchimisiz yoki o'qituvchimisiz?",
-        parse_mode="HTML",
-        reply_markup=ReplyKeyboardRemove(),
-    )
-    await message.answer("Tanlang:", reply_markup=role_keyboard())
+    if not await _is_subscribed(message.bot, message.from_user.id):
+        await _send_subscription_gate(message)
+        return
+
+    await _begin_registration(message.bot, message.chat.id, message.from_user.id, state)
 
 
 ROLE_LABELS = {"student": "O'quvchi", "teacher": "O'qituvchi"}
