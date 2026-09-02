@@ -52,19 +52,25 @@ DB_PATH = "mathbot.db"
 TURSO_DATABASE_URL = os.getenv("TURSO_DATABASE_URL", "").strip()
 TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "").strip()
 
-# Kurslar: har biri o'z guruh havolasiga ega
-# group_link o'rniga o'zingizning guruh/kanal invite havolangizni qo'ying
+# Kurslar: har biri o'z guruh havolasiga va OBUNA TEKSHIRILADIGAN kanaliga ega.
+# "channel" - bot.get_chat_member() uchun ishlatiladi (bot shu kanalda admin
+# bo'lishi shart). Yangi kurs qo'shmoqchi bo'lsangiz, shu ro'yxatga yangi
+# kalit qo'shing - ro'yxatdan o'tishda avtomatik variantlardan biri sifatida
+# chiqadi va o'sha kursning kanaliga obuna tekshiriladi.
 COURSES = {
     "turbo_4_0": {
         "name": "Turbo 4.0 MS",
         "group_link": "https://t.me/turbomathka",
+        "channel": "@turbomathka",
     },
 }
 
-# Ro'yxatdan o'tishdan oldin foydalanuvchi shu kanalga OBUNA bo'lgan bo'lishi
-# SHART (bot shu kanalda admin bo'lishi kerak, aks holda obunani tekshira
-# olmaydi). "@" bilan yoki kanal ID (-100...) bilan yozish mumkin.
-REQUIRED_SUBSCRIPTION_CHANNEL = "@turbomathka"
+# Obunani qayta tekshirish oralig'i (soniyalarda) - foydalanuvchi bot bilan
+# HAR safar muloqot qilganda emas, shu vaqt oralig'ida bir marta tekshiriladi
+# (Telegram API so'rovlar chegarasidan (rate limit) himoyalanish uchun -
+# minglab faol foydalanuvchida har xabarga tekshirish botni sekinlashtirib,
+# hatto Telegram tomonidan vaqtincha bloklanishiga olib kelishi mumkin).
+SUBSCRIPTION_RECHECK_INTERVAL_SECONDS = 600  # 10 daqiqa
 
 # "Adminga xabar" tugmasidagi standart havola - Boss "🔗 Admin havolasini
 # o'zgartirish" tugmasi orqali bazada saqlangan qiymat bilan buni
