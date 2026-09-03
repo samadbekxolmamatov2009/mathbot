@@ -18,7 +18,7 @@ import logging
 from aiogram import BaseMiddleware
 
 import database as db
-from config import ADMIN_IDS, BOSS_IDS, COURSES, SUBSCRIPTION_RECHECK_INTERVAL_SECONDS
+from config import ADMIN_IDS, BOSS_IDS, COURSES, DEFAULT_ADMIN_CONTACT_URL, SUBSCRIPTION_RECHECK_INTERVAL_SECONDS
 from timezone_utils import now_tashkent, now_tashkent_str
 
 
@@ -63,11 +63,12 @@ class SubscriptionCheckMiddleware(BaseMiddleware):
         if not still_subscribed:
             await db.reset_user_registration(user.id)
             course_name = COURSES.get(course_key, {}).get("name", "kurs")
+            admin_url = await db.get_setting("admin_contact_url", DEFAULT_ADMIN_CONTACT_URL)
             text = (
                 f"\u26a0\ufe0f Siz <b>{course_name}</b> kanalidan chiqarib yuborilgansiz "
                 "(yoki obunani bekor qilgansiz).\n\n"
-                "Botdan foydalanishni davom ettirish uchun qaytadan kanalga obuna "
-                "bo'lib, /start orqali ro'yxatdan qaytadan o'tishingiz kerak."
+                "Botdan foydalanishni davom ettirish uchun administrator bilan bog'laning: "
+                f"{admin_url}"
             )
             try:
                 if bot:
