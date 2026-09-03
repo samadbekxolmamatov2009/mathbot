@@ -254,6 +254,15 @@ async function submitTest() {
   } catch (e) {
     if (isTelegram) tg.MainButton.hideProgress();
     els.submitBtn.disabled = false;
+    fetch(`${API_BASE}/api/debug_log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        page: "aplus.js:submitTest",
+        message: String((e && e.message) || e),
+        stack: e && e.stack,
+      }),
+    }).catch(() => {});
     const message = "Server bilan bog'lanishda xatolik.";
     if (isTelegram) tg.showAlert(message);
     else alert(message);
@@ -309,6 +318,15 @@ async function init() {
     renderQuestions();
   } catch (e) {
     clearLoadingHint();
+    fetch(`${API_BASE}/api/debug_log`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        page: "aplus.js:init",
+        message: String((e && e.message) || e),
+        stack: e && e.stack,
+      }),
+    }).catch(() => {});
     showInfo("⚠️", "Server bilan bog'lanishda xatolik.");
   }
 }
