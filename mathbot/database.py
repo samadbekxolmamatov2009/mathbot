@@ -150,15 +150,59 @@ async def init_db():
         """)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS report_schedule (
-                id INTEGER PRIMARY KEY CHECK (id = 1),
-                day_of_week INTEGER NOT NULL DEFAULT 0,
-                time_of_day TEXT NOT NULL DEFAULT '09:00',
-                enabled INTEGER NOT NULL DEFAULT 0,
-                last_sent_at TEXT,
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                day_of_week INTEGER NOT NULL,
+                time_of_day TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
                 updated_by INTEGER,
                 updated_at TEXT DEFAULT (datetime('now'))
             )
         """)
+        # Eski (bitta qatorli, "CHECK (id = 1)" bilan yaratilgan) jadvalni
+        # bir nechta vaqtni qo'llab-quvvatlaydigan yangi tuzilmaga o'tkazish.
+        try:
+            check_cursor = await db.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='report_schedule'"
+            )
+            row = await check_cursor.fetchone()
+            if row and row[0] and "CHECK" in row[0]:
+                await db.execute("ALTER TABLE report_schedule RENAME TO report_schedule_old")
+                await db.execute("""
+                    CREATE TABLE report_schedule (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        day_of_week INTEGER NOT NULL,
+                        time_of_day TEXT NOT NULL,
+                        enabled INTEGER NOT NULL DEFAULT 1,
+                        updated_by INTEGER,
+                        updated_at TEXT DEFAULT (datetime('now'))
+                    )
+                """)
+                old_cursor = await db.execute(
+                    "SELECT day_of_week, time_of_day, enabled, updated_by, updated_at, last_sent_at "
+                    "FROM report_schedule_old WHERE day_of_week IS NOT NULL"
+                )
+                old_row = await old_cursor.fetchone()
+                if old_row:
+                    await db.execute(
+                        """INSERT INTO report_schedule (day_of_week, time_of_day, enabled, updated_by, updated_at)
+                           VALUES (?, ?, ?, ?, ?)""",
+                        (old_row[0], old_row[1], old_row[2], old_row[3], old_row[4]),
+                    )
+                    if old_row[5]:
+                        await db.execute(
+                            """CREATE TABLE IF NOT EXISTS bot_settings (
+                                   key TEXT PRIMARY KEY,
+                                   value TEXT
+                               )"""
+                        )
+                        await db.execute(
+                            """INSERT INTO bot_settings (key, value) VALUES ('report_last_sent_at', ?)
+                               ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+                            (old_row[5],),
+                        )
+                await db.execute("DROP TABLE report_schedule_old")
+        except Exception:
+            pass
         await db.execute("""
             CREATE TABLE IF NOT EXISTS admins (
                 telegram_id INTEGER PRIMARY KEY,
@@ -1068,39 +1112,50 @@ async def set_broadcast_schedule_file(file_data: str | None, file_name: str | No
 
 
 # ---------- Haftalik hisobot rejasi (haqiqiy test natijalari asosida) ----------
+# Bir nechta kun/vaqt qo'shish mumkin (masalan har Dushanba VA har Juma).
 
-async def get_report_schedule():
+async def get_report_schedules():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM report_schedule WHERE id = 1"
+            "SELECT * FROM report_schedule ORDER BY day_of_week, time_of_day"
         ) as cursor:
-            return await cursor.fetchone()
+            return await cursor.fetchall()
 
 
-async def save_report_schedule(day_of_week: int, time_of_day: str, enabled: bool, updated_by: int):
+async def add_report_schedule(day_of_week: int, time_of_day: str, enabled: bool, updated_by: int) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            """INSERT INTO report_schedule
-                   (id, day_of_week, time_of_day, enabled, updated_by, updated_at)
-               VALUES (1, ?, ?, ?, ?, datetime('now'))
-               ON CONFLICT(id) DO UPDATE SET
-                   day_of_week = excluded.day_of_week,
-                   time_of_day = excluded.time_of_day,
-                   enabled = excluded.enabled,
-                   updated_by = excluded.updated_by,
-                   updated_at = excluded.updated_at""",
+        cursor = await db.execute(
+            """INSERT INTO report_schedule (day_of_week, time_of_day, enabled, updated_by, updated_at)
+               VALUES (?, ?, ?, ?, datetime('now'))""",
             (day_of_week, time_of_day, int(enabled), updated_by),
         )
         await db.commit()
+        return cursor.lastrowid
+
+
+async def update_report_schedule(schedule_id: int, day_of_week: int, time_of_day: str, enabled: bool):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """UPDATE report_schedule SET day_of_week = ?, time_of_day = ?, enabled = ?, updated_at = datetime('now')
+               WHERE id = ?""",
+            (day_of_week, time_of_day, int(enabled), schedule_id),
+        )
+        await db.commit()
+
+
+async def delete_report_schedule(schedule_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM report_schedule WHERE id = ?", (schedule_id,))
+        await db.commit()
+
+
+async def get_report_last_sent_at() -> str | None:
+    return await get_setting("report_last_sent_at")
 
 
 async def mark_report_sent(sent_at_iso: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE report_schedule SET last_sent_at = ? WHERE id = 1", (sent_at_iso,)
-        )
-        await db.commit()
+    await set_setting("report_last_sent_at", sent_at_iso)
 
 
 async def get_submissions_since(since_iso: str):
