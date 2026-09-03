@@ -5,6 +5,7 @@ Bitta aiohttp ilova ham statik fayllarni (HTML/CSS/JS), ham API'ni xizmat qiladi
 """
 
 import asyncio
+import base64
 import hashlib
 import hmac
 import json
@@ -149,11 +150,15 @@ async def create_test_handler(request: web.Request):
     if end_time <= start_time:
         return web.json_response({"error": "invalid_time_range"}, status=400)
 
+    show_wrong_answers = bool(body.get("show_wrong_answers", True))
+
     code = _generate_code()
     while await db.code_exists(code):
         code = _generate_code()
 
-    await db.create_test(code, user["id"], answers, start_time, end_time, name, total_questions)
+    await db.create_test(
+        code, user["id"], answers, start_time, end_time, name, total_questions, show_wrong_answers
+    )
 
     saved = await db.get_test_by_code(code)
     if not saved:
@@ -187,47 +192,9 @@ async def get_test_edit_data_handler(request: web.Request):
             "start_time": test["start_time"],
             "end_time": test["end_time"],
             "total_questions": test["total_questions"] or DEFAULT_TOTAL_QUESTIONS,
+            "show_wrong_answers": _show_wrong_answers(test),
         }
     )
-
-
-async def _recalculate_test_scores(old_test, new_answers: dict, new_total_questions: int):
-    """Ustoz test javob kalitini to'g'irlaganda, o'quvchilar allaqachon
-    topshirgan javoblari YANGI kalit bo'yicha qayta tekshiriladi va
-    test_submissions.score yangilanadi (aks holda tangalar eski, xato
-    kalitga asoslangan holda qolib ketaveradi).
-
-    "Kech topshirilgani" uchun ball qisqartirilgan-qisqartirilmaganini
-    alohida ustunda saqlamaymiz - shuning uchun bu holatni eski (kalit
-    to'g'irlanishidan oldingi) ball orqali bilib olamiz: agar eski ball
-    eski to'g'ri javoblar sonidan kam bo'lsa, demak kech topshirilgan."""
-    old_answers = json.loads(old_test["answers"])
-    old_total_questions = old_test["total_questions"] or DEFAULT_TOTAL_QUESTIONS
-
-    submissions = await db.get_test_submissions_for_scoring(old_test["id"])
-    updates = []
-    for sub in submissions:
-        user_answers = json.loads(sub["answers"])
-
-        old_raw = sum(
-            1
-            for q in range(1, old_total_questions + 1)
-            if user_answers.get(str(q)) == old_answers.get(str(q))
-        )
-        is_late = old_raw > 0 and sub["score"] < old_raw
-
-        new_raw = sum(
-            1
-            for q in range(1, new_total_questions + 1)
-            if user_answers.get(str(q)) == new_answers.get(str(q))
-        )
-        new_score = new_raw * LATE_SUBMISSION_SCORE_RATIO if is_late else new_raw
-
-        if new_score != sub["score"]:
-            updates.append((sub["id"], new_score))
-
-    if updates:
-        await db.update_test_submission_scores(updates)
 
 
 async def update_test_handler(request: web.Request):
@@ -277,16 +244,21 @@ async def update_test_handler(request: web.Request):
     if end_time <= start_time:
         return web.json_response({"error": "invalid_time_range"}, status=400)
 
-    await db.update_test(test_id, answers, start_time, end_time, name, total_questions)
+    show_wrong_answers = bool(body.get("show_wrong_answers", True))
+
+    await db.update_test(test_id, answers, start_time, end_time, name, total_questions, show_wrong_answers)
 
     saved = await db.get_test_by_id(test_id)
     if not saved or json.loads(saved["answers"]) != answers:
         log.error("Test yangilandi deb hisoblandi, lekin baza mos kelmadi! id=%s", test_id)
         return web.json_response({"error": "save_failed"}, status=500)
 
-    await _recalculate_test_scores(test, answers, total_questions)
-
     return web.json_response({"code": test["code"]})
+
+
+def _show_wrong_answers(test) -> bool:
+    value = test["show_wrong_answers"]
+    return True if value is None else bool(value)
 
 
 async def test_status_handler(request: web.Request):
@@ -307,7 +279,9 @@ async def test_status_handler(request: web.Request):
             already_submitted = {
                 "score": sub["score"],
                 "total": total_questions,
-                "details": _build_details(correct_answers, user_answers, total_questions),
+                "details": _build_details(correct_answers, user_answers, total_questions)
+                if _show_wrong_answers(test)
+                else None,
             }
 
     now = _now_str()
@@ -360,7 +334,9 @@ async def submit_test_handler(request: web.Request):
             {
                 "score": existing["score"],
                 "total": total_questions,
-                "details": _build_details(correct_answers, user_answers, total_questions),
+                "details": _build_details(correct_answers, user_answers, total_questions)
+                if _show_wrong_answers(test)
+                else None,
                 "already_submitted": True,
             }
         )
@@ -382,7 +358,7 @@ async def submit_test_handler(request: web.Request):
         for q in range(1, total_questions + 1)
         if submitted_answers.get(str(q)) == correct_answers.get(str(q))
     )
-    score = raw_score * LATE_SUBMISSION_SCORE_RATIO if is_late else raw_score
+    score = round(raw_score * LATE_SUBMISSION_SCORE_RATIO) if is_late else raw_score
 
     await db.save_test_submission(test["id"], user["id"], submitted_answers, score)
 
@@ -390,7 +366,9 @@ async def submit_test_handler(request: web.Request):
         {
             "score": score,
             "total": total_questions,
-            "details": _build_details(correct_answers, submitted_answers, total_questions),
+            "details": _build_details(correct_answers, submitted_answers, total_questions)
+            if _show_wrong_answers(test)
+            else None,
             "already_submitted": False,
             "late": is_late,
         }
@@ -424,7 +402,6 @@ async def my_results_handler(request: web.Request):
         return web.json_response({"error": "invalid_init_data"}, status=401)
 
     rows = await db.get_user_test_results(user["id"])
-    aplus_rows = await db.get_user_aplus_results(user["id"])
     coins = await db.get_user_coins(user["id"])
     return web.json_response(
         {
@@ -438,21 +415,10 @@ async def my_results_handler(request: web.Request):
                 }
                 for row in rows
             ],
-            "aplus_results": [
-                {
-                    "name": row["name"] or row["code"],
-                    "code": row["code"],
-                    "score": row["score"],
-                    "total_questions": row["total_questions"],
-                    "submitted_at": row["submitted_at"],
-                }
-                for row in aplus_rows
-            ],
             "coins": {
                 "attendance_count": coins["attendance_count"],
                 "attendance_coins": coins["attendance_coins"],
                 "test_coins": coins["test_coins"],
-                "aplus_coins": coins["aplus_coins"],
                 "test_streak_coins": coins["test_streak_coins"],
                 "total": coins["total"],
             },
@@ -460,44 +426,31 @@ async def my_results_handler(request: web.Request):
     )
 
 
-def _validate_schedule_input(body: dict):
-    day_of_week = body.get("day_of_week")
-    time_of_day = body.get("time_of_day") or ""
-    enabled = bool(body.get("enabled", True))
-
-    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
-        return None, web.json_response({"error": "invalid_day"}, status=400)
-    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
-        return None, web.json_response({"error": "invalid_time"}, status=400)
-
-    return (day_of_week, time_of_day, enabled), None
-
-
-async def list_report_schedules_handler(request: web.Request):
+async def get_broadcast_schedule_handler(request: web.Request):
     user = verify_init_data(request.query.get("init_data", ""))
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
     if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
-    schedules = await db.get_report_schedules()
+    schedule = await db.get_broadcast_schedule()
+    if not schedule:
+        return web.json_response({"schedule": None})
+
     return web.json_response(
         {
-            "schedules": [
-                {
-                    "id": row["id"],
-                    "day_of_week": row["day_of_week"],
-                    "time_of_day": row["time_of_day"],
-                    "enabled": bool(row["enabled"]),
-                    "last_fired_date": row["last_fired_date"],
-                }
-                for row in schedules
-            ]
+            "schedule": {
+                "message": schedule["message"],
+                "day_of_week": schedule["day_of_week"],
+                "time_of_day": schedule["time_of_day"],
+                "enabled": bool(schedule["enabled"]),
+                "file_name": schedule["file_name"],
+            }
         }
     )
 
 
-async def add_report_schedule_handler(request: web.Request):
+async def save_broadcast_schedule_handler(request: web.Request):
     try:
         body = await request.json()
     except json.JSONDecodeError:
@@ -509,38 +462,50 @@ async def add_report_schedule_handler(request: web.Request):
     if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
-    parsed, error = _validate_schedule_input(body)
-    if error:
-        return error
-    day_of_week, time_of_day, enabled = parsed
+    message = (body.get("message") or "").strip()
+    day_of_week = body.get("day_of_week")
+    time_of_day = body.get("time_of_day") or ""
+    enabled = bool(body.get("enabled", True))
 
-    schedule_id = await db.add_report_schedule(day_of_week, time_of_day, enabled, user["id"])
-    return web.json_response({"ok": True, "id": schedule_id})
+    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
+        return web.json_response({"error": "invalid_day"}, status=400)
+    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
+        return web.json_response({"error": "invalid_time"}, status=400)
 
+    existing = await db.get_broadcast_schedule()
+    has_file = bool(existing and existing["file_data"])
+    if not message and not has_file:
+        return web.json_response({"error": "missing_message"}, status=400)
 
-async def update_report_schedule_handler(request: web.Request):
-    try:
-        body = await request.json()
-    except json.JSONDecodeError:
-        return web.json_response({"error": "bad_request"}, status=400)
+    await db.save_broadcast_schedule(message, day_of_week, time_of_day, enabled, user["id"])
 
-    user = verify_init_data(body.get("init_data", ""))
-    if not user:
-        return web.json_response({"error": "invalid_init_data"}, status=401)
-    if not is_admin(user["id"]):
-        return web.json_response({"error": "not_admin"}, status=403)
-
-    parsed, error = _validate_schedule_input(body)
-    if error:
-        return error
-    day_of_week, time_of_day, enabled = parsed
-
-    schedule_id = int(request.match_info["id"])
-    await db.update_report_schedule(schedule_id, day_of_week, time_of_day, enabled, user["id"])
     return web.json_response({"ok": True})
 
 
-async def delete_report_schedule_handler(request: web.Request):
+async def get_report_schedule_handler(request: web.Request):
+    user = verify_init_data(request.query.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    schedule = await db.get_report_schedule()
+    if not schedule:
+        return web.json_response({"schedule": None})
+
+    return web.json_response(
+        {
+            "schedule": {
+                "day_of_week": schedule["day_of_week"],
+                "time_of_day": schedule["time_of_day"],
+                "enabled": bool(schedule["enabled"]),
+                "last_sent_at": schedule["last_sent_at"],
+            }
+        }
+    )
+
+
+async def save_report_schedule_handler(request: web.Request):
     try:
         body = await request.json()
     except json.JSONDecodeError:
@@ -552,8 +517,70 @@ async def delete_report_schedule_handler(request: web.Request):
     if not is_admin(user["id"]):
         return web.json_response({"error": "not_admin"}, status=403)
 
-    schedule_id = int(request.match_info["id"])
-    await db.delete_report_schedule(schedule_id)
+    day_of_week = body.get("day_of_week")
+    time_of_day = body.get("time_of_day") or ""
+    enabled = bool(body.get("enabled", True))
+
+    if not isinstance(day_of_week, int) or not (0 <= day_of_week <= 6):
+        return web.json_response({"error": "invalid_day"}, status=400)
+    if not re.fullmatch(r"[0-2]\d:[0-5]\d", time_of_day):
+        return web.json_response({"error": "invalid_time"}, status=400)
+
+    await db.save_report_schedule(day_of_week, time_of_day, enabled, user["id"])
+
+    return web.json_response({"ok": True})
+
+
+MAX_BROADCAST_FILE_SIZE = 15 * 1024 * 1024  # 15 MB - Telegram bot API hujjat chegarasidan xavfsiz past
+
+
+async def upload_broadcast_file_handler(request: web.Request):
+    user = verify_init_data(request.query.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    reader = await request.multipart()
+    field = await reader.next()
+    if field is None or field.name != "file":
+        return web.json_response({"error": "missing_file"}, status=400)
+
+    file_name = field.filename or "fayl.pdf"
+    chunks = []
+    total = 0
+    while True:
+        chunk = await field.read_chunk()
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_BROADCAST_FILE_SIZE:
+            return web.json_response({"error": "file_too_large"}, status=400)
+        chunks.append(chunk)
+
+    file_bytes = b"".join(chunks)
+    if not file_bytes:
+        return web.json_response({"error": "empty_file"}, status=400)
+
+    file_data_b64 = base64.b64encode(file_bytes).decode("ascii")
+    await db.set_broadcast_schedule_file(file_data_b64, file_name, user["id"])
+
+    return web.json_response({"ok": True, "file_name": file_name})
+
+
+async def remove_broadcast_file_handler(request: web.Request):
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    user = verify_init_data(body.get("init_data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+
+    await db.set_broadcast_schedule_file(None, None, user["id"])
     return web.json_response({"ok": True})
 
 
@@ -622,7 +649,11 @@ async def aplus_create_test_handler(request: web.Request):
     while await db.aplus_code_exists(code):
         code = _generate_code()
 
-    await db.create_aplus_test(code, user["id"], answers, start_time, end_time, name, question_count)
+    show_wrong_answers = bool(body.get("show_wrong_answers", True))
+
+    await db.create_aplus_test(
+        code, user["id"], answers, start_time, end_time, name, question_count, show_wrong_answers
+    )
 
     saved = await db.get_aplus_test_by_code(code)
     if not saved:
@@ -656,40 +687,9 @@ async def aplus_get_edit_data_handler(request: web.Request):
             "question_count": test["question_count"],
             "start_time": test["start_time"],
             "end_time": test["end_time"],
+            "show_wrong_answers": _show_wrong_answers(test),
         }
     )
-
-
-async def _recalculate_aplus_scores(old_test, new_answers: dict, new_question_count: int):
-    """_recalculate_test_scores bilan bir xil mantiq, A+ (yozma javobli)
-    testlar uchun - javoblar answers_equivalent() orqali solishtiriladi."""
-    old_answers = json.loads(old_test["answers"])
-    old_question_count = old_test["question_count"]
-
-    submissions = await db.get_aplus_submissions_for_scoring(old_test["id"])
-    updates = []
-    for sub in submissions:
-        user_answers = json.loads(sub["answers"])
-
-        old_raw = sum(
-            1
-            for key in _aplus_field_keys(old_question_count)
-            if answers_equivalent(old_answers.get(key), user_answers.get(key))
-        )
-        is_late = old_raw > 0 and sub["score"] < old_raw
-
-        new_raw = sum(
-            1
-            for key in _aplus_field_keys(new_question_count)
-            if answers_equivalent(new_answers.get(key), user_answers.get(key))
-        )
-        new_score = new_raw * LATE_SUBMISSION_SCORE_RATIO if is_late else new_raw
-
-        if new_score != sub["score"]:
-            updates.append((sub["id"], new_score))
-
-    if updates:
-        await db.update_aplus_submission_scores(updates)
 
 
 async def aplus_update_test_handler(request: web.Request):
@@ -736,9 +736,10 @@ async def aplus_update_test_handler(request: web.Request):
     if end_time <= start_time:
         return web.json_response({"error": "invalid_time_range"}, status=400)
 
-    await db.update_aplus_test(test_id, answers, start_time, end_time, name, question_count)
-
-    await _recalculate_aplus_scores(test, answers, question_count)
+    await db.update_aplus_test(
+        test_id, answers, start_time, end_time, name, question_count,
+        bool(body.get("show_wrong_answers", True)),
+    )
 
     return web.json_response({"code": test["code"]})
 
@@ -761,7 +762,9 @@ async def aplus_test_status_handler(request: web.Request):
             already_submitted = {
                 "score": sub["score"],
                 "total": question_count * 2,
-                "details": _aplus_build_details(correct_answers, user_answers, question_count),
+                "details": _aplus_build_details(correct_answers, user_answers, question_count)
+                if _show_wrong_answers(test)
+                else None,
             }
 
     now = _now_str()
@@ -812,7 +815,9 @@ async def aplus_submit_handler(request: web.Request):
             {
                 "score": existing["score"],
                 "total": question_count * 2,
-                "details": _aplus_build_details(correct_answers, user_answers, question_count),
+                "details": _aplus_build_details(correct_answers, user_answers, question_count)
+                if _show_wrong_answers(test)
+                else None,
                 "already_submitted": True,
             }
         )
@@ -834,7 +839,7 @@ async def aplus_submit_handler(request: web.Request):
         for key in _aplus_field_keys(question_count)
         if answers_equivalent(correct_answers.get(key), submitted_answers.get(key))
     )
-    score = raw_score * LATE_SUBMISSION_SCORE_RATIO if is_late else raw_score
+    score = round(raw_score * LATE_SUBMISSION_SCORE_RATIO) if is_late else raw_score
 
     await db.save_aplus_submission(test["id"], user["id"], submitted_answers, score)
 
@@ -842,7 +847,9 @@ async def aplus_submit_handler(request: web.Request):
         {
             "score": score,
             "total": question_count * 2,
-            "details": _aplus_build_details(correct_answers, submitted_answers, question_count),
+            "details": _aplus_build_details(correct_answers, submitted_answers, question_count)
+            if _show_wrong_answers(test)
+            else None,
             "already_submitted": False,
             "late": is_late,
         }
@@ -927,10 +934,12 @@ def create_app() -> web.Application:
     app.router.add_post("/api/test/{code}/submit", submit_test_handler)
     app.router.add_get("/api/rating", rating_handler)
     app.router.add_get("/api/my_results", my_results_handler)
-    app.router.add_get("/api/report_schedule", list_report_schedules_handler)
-    app.router.add_post("/api/report_schedule", add_report_schedule_handler)
-    app.router.add_post("/api/report_schedule/{id}/update", update_report_schedule_handler)
-    app.router.add_post("/api/report_schedule/{id}/delete", delete_report_schedule_handler)
+    app.router.add_get("/api/broadcast_schedule", get_broadcast_schedule_handler)
+    app.router.add_post("/api/broadcast_schedule", save_broadcast_schedule_handler)
+    app.router.add_post("/api/broadcast_schedule/file", upload_broadcast_file_handler)
+    app.router.add_post("/api/broadcast_schedule/file/remove", remove_broadcast_file_handler)
+    app.router.add_get("/api/report_schedule", get_report_schedule_handler)
+    app.router.add_post("/api/report_schedule", save_report_schedule_handler)
     app.router.add_post("/api/aplus/create_test", aplus_create_test_handler)
     app.router.add_get("/api/aplus/test_by_id/{id}", aplus_get_edit_data_handler)
     app.router.add_post("/api/aplus/test_by_id/{id}/update", aplus_update_test_handler)
