@@ -65,15 +65,8 @@ function showTestName(name) {
   }
 }
 
-function showLateWarning(endTime) {
-  const timeLabel = endTime ? formatDateTime(endTime) : "";
-  els.lateWarning.textContent = timeLabel
-    ? `⏰ Test vaqti ${timeLabel} da tugagan — javob berishingiz mumkin, ammo natija 75% hisoblanadi.`
-    : "⏰ Test vaqti tugagan — javob berishingiz mumkin, ammo natija 75% hisoblanadi.";
+function showLateWarning() {
   els.lateWarning.hidden = false;
-  setTimeout(() => {
-    els.lateWarning.hidden = true;
-  }, 2000);
 }
 
 function showInfo(icon, text) {
@@ -177,6 +170,15 @@ function renderResult(score, total, details, late) {
     note.textContent = "⏰ Kech topshirilgani uchun ball 75% ga qisqartirildi.";
     els.resultList.appendChild(note);
   }
+
+  if (!details) {
+    const note = document.createElement("div");
+    note.className = "result-hidden-note";
+    note.textContent = "Bu testda xato/to'g'ri savollar ko'rsatilmaydi - faqat umumiy ball.";
+    els.resultList.appendChild(note);
+    return;
+  }
+
   details.forEach((d) => {
     const row = document.createElement("div");
     row.className = `result-row ${d.is_correct ? "correct" : "wrong"}`;
@@ -279,7 +281,7 @@ async function init() {
     }
 
     if (data.window_status === "ended") {
-      showLateWarning(data.end_time);
+      showLateWarning();
     }
 
     questions = data.questions || [];
