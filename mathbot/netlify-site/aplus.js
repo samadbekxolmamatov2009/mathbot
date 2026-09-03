@@ -177,6 +177,15 @@ function renderResult(score, total, details, late) {
     note.textContent = "⏰ Kech topshirilgani uchun ball 75% ga qisqartirildi.";
     els.resultList.appendChild(note);
   }
+
+  if (!details) {
+    const note = document.createElement("div");
+    note.className = "result-hidden-note";
+    note.textContent = "Bu testda xato/to'g'ri savollar ko'rsatilmaydi - faqat umumiy ball.";
+    els.resultList.appendChild(note);
+    return;
+  }
+
   details.forEach((d) => {
     const row = document.createElement("div");
     row.className = `result-row ${d.is_correct ? "correct" : "wrong"}`;
