@@ -62,27 +62,30 @@ DIRECTION_LABELS = {
 
 async def send_report_schedule_loop(bot: Bot):
     """Haftalik hisobot PDF'ini "⚙️ Sozlamalar"da (Boss/admin tomonidan)
-    belgilangan kun/vaqtda, real test natijalari asosida hisoblab, kanalga
-    yuboradi. Har soatda emas - faqat belgilangan kun/vaqtda, va faqat
-    oldingi hisobotdan keyin topshirilgan natijalarni hisobga oladi."""
+    qo'shilgan HAR BIR kun/vaqtda, real test natijalari asosida hisoblab,
+    kanalga yuboradi. Bir nechta kun/vaqt qo'shilgan bo'lishi mumkin
+    (masalan har Dushanba VA har Juma) - shu vaqtlardan BIRI kelganda,
+    oldingi (istalgan vaqtdagi) hisobotdan keyin topshirilgan natijalar
+    hisobga olinadi."""
     while True:
         try:
-            schedule = await db.get_report_schedule()
-            if schedule and schedule["enabled"]:
-                now = now_tashkent()
-                current_week = now.strftime("%G-W%V")
-                last_sent_at = schedule["last_sent_at"]
-                last_sent_week = (
-                    datetime.fromisoformat(last_sent_at).strftime("%G-W%V")
-                    if last_sent_at
-                    else None
-                )
-                if (
-                    now.weekday() == schedule["day_of_week"]
-                    and now.strftime("%H:%M") == schedule["time_of_day"]
-                    and last_sent_week != current_week
-                ):
+            now = now_tashkent()
+            current_minute = now.strftime("%Y-%m-%dT%H:%M")
+            last_fired_at = await db.get_setting("report_last_fired_at")
+
+            if last_fired_at != current_minute:
+                schedules = await db.get_report_schedules()
+                matching = [
+                    s
+                    for s in schedules
+                    if s["enabled"]
+                    and s["day_of_week"] == now.weekday()
+                    and s["time_of_day"] == now.strftime("%H:%M")
+                ]
+                if matching:
+                    await db.set_setting("report_last_fired_at", current_minute)
                     try:
+                        last_sent_at = await db.get_report_last_sent_at()
                         since_iso = last_sent_at or ""
                         since_dt = (
                             datetime.fromisoformat(last_sent_at)
