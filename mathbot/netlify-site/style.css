@@ -97,6 +97,16 @@ button {
   font-weight: 600;
 }
 
+.result-hidden-note {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--card, #f2f4f7);
+  color: var(--hint);
+  font-size: 13px;
+  text-align: center;
+}
+
 #app {
   padding: 14px 14px 4px;
 }
