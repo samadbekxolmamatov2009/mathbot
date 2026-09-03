@@ -788,6 +788,20 @@ async def get_user_test_results(telegram_id: int):
             return await cursor.fetchall()
 
 
+async def get_user_aplus_test_results(telegram_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT at.name, at.code, at.question_count, aps.score, aps.submitted_at
+               FROM aplus_submissions aps
+               JOIN aplus_tests at ON at.id = aps.test_id
+               WHERE aps.telegram_id = ?
+               ORDER BY aps.submitted_at ASC""",
+            (telegram_id,),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
 async def save_test_submission(test_id: int, telegram_id: int, answers: dict, score: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
