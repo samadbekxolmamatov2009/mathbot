@@ -69,6 +69,8 @@ async def init_db():
             await db.execute("ALTER TABLE tests ADD COLUMN report_sent INTEGER DEFAULT 0")
         if "total_questions" not in existing_columns:
             await db.execute("ALTER TABLE tests ADD COLUMN total_questions INTEGER DEFAULT 35")
+        if "show_wrong_answers" not in existing_columns:
+            await db.execute("ALTER TABLE tests ADD COLUMN show_wrong_answers INTEGER DEFAULT 1")
 
         users_info_cursor = await db.execute("PRAGMA table_info(users)")
         users_columns = {row[1] for row in await users_info_cursor.fetchall()}
@@ -116,6 +118,11 @@ async def init_db():
                 report_sent INTEGER DEFAULT 0
             )
         """)
+
+        aplus_table_info_cursor = await db.execute("PRAGMA table_info(aplus_tests)")
+        aplus_existing_columns = {row[1] for row in await aplus_table_info_cursor.fetchall()}
+        if "show_wrong_answers" not in aplus_existing_columns:
+            await db.execute("ALTER TABLE aplus_tests ADD COLUMN show_wrong_answers INTEGER DEFAULT 1")
         await db.execute("""
             CREATE TABLE IF NOT EXISTS aplus_submissions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -605,12 +612,13 @@ async def create_test(
     end_time: str,
     name: str = "",
     total_questions: int = 35,
+    show_wrong_answers: bool = True,
 ) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            """INSERT INTO tests (code, created_by, answers, start_time, end_time, name, total_questions)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (code, created_by, json.dumps(answers), start_time, end_time, name, total_questions),
+            """INSERT INTO tests (code, created_by, answers, start_time, end_time, name, total_questions, show_wrong_answers)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (code, created_by, json.dumps(answers), start_time, end_time, name, total_questions, int(show_wrong_answers)),
         )
         await db.commit()
         return cursor.lastrowid
@@ -650,12 +658,13 @@ async def update_test(
     end_time: str,
     name: str = "",
     total_questions: int = 35,
+    show_wrong_answers: bool = True,
 ):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """UPDATE tests SET answers = ?, start_time = ?, end_time = ?, name = ?, total_questions = ?
+            """UPDATE tests SET answers = ?, start_time = ?, end_time = ?, name = ?, total_questions = ?, show_wrong_answers = ?
                WHERE id = ?""",
-            (json.dumps(answers), start_time, end_time, name, total_questions, test_id),
+            (json.dumps(answers), start_time, end_time, name, total_questions, int(show_wrong_answers), test_id),
         )
         await db.commit()
 
@@ -762,12 +771,13 @@ async def create_aplus_test(
     end_time: str,
     name: str,
     question_count: int,
+    show_wrong_answers: bool = True,
 ) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
-            """INSERT INTO aplus_tests (code, created_by, answers, start_time, end_time, name, question_count)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (code, created_by, json.dumps(answers), start_time, end_time, name, question_count),
+            """INSERT INTO aplus_tests (code, created_by, answers, start_time, end_time, name, question_count, show_wrong_answers)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (code, created_by, json.dumps(answers), start_time, end_time, name, question_count, int(show_wrong_answers)),
         )
         await db.commit()
         return cursor.lastrowid
@@ -807,13 +817,14 @@ async def update_aplus_test(
     end_time: str,
     name: str,
     question_count: int,
+    show_wrong_answers: bool = True,
 ):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """UPDATE aplus_tests
-               SET answers = ?, start_time = ?, end_time = ?, name = ?, question_count = ?
+               SET answers = ?, start_time = ?, end_time = ?, name = ?, question_count = ?, show_wrong_answers = ?
                WHERE id = ?""",
-            (json.dumps(answers), start_time, end_time, name, question_count, test_id),
+            (json.dumps(answers), start_time, end_time, name, question_count, int(show_wrong_answers), test_id),
         )
         await db.commit()
 
