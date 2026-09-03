@@ -1,6 +1,21 @@
 const tg = window.Telegram && window.Telegram.WebApp;
 const isTelegram = !!(tg && tg.platform && tg.platform !== "unknown");
 
+window.onerror = function (message, source, lineno, colno, error) {
+  fetch(`${API_BASE}/api/debug_log`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      page: "aplus.js",
+      message: String(message),
+      source,
+      lineno,
+      colno,
+      stack: error && error.stack,
+    }),
+  }).catch(() => {});
+};
+
 if (tg) {
   tg.ready();
   tg.expand();
@@ -183,26 +198,25 @@ function renderResult(score, total, details, late) {
     note.className = "result-hidden-note";
     note.textContent = "Bu testda xato/to'g'ri savollar ko'rsatilmaydi - faqat umumiy ball.";
     els.resultList.appendChild(note);
-    return;
+  } else {
+    details.forEach((d) => {
+      const row = document.createElement("div");
+      row.className = `result-row ${d.is_correct ? "correct" : "wrong"}`;
+
+      const left = document.createElement("span");
+      left.textContent = `${d.key}-javob`;
+
+      const right = document.createElement("span");
+      right.className = `result-status ${d.is_correct ? "correct" : "wrong"}`;
+      right.textContent = d.is_correct
+        ? `✔ To'g'ri (${d.your_answer ?? "—"})`
+        : `✘ Noto'g'ri (siz: ${d.your_answer ?? "—"}, to'g'ri: ${d.correct_answer ?? "—"})`;
+
+      row.appendChild(left);
+      row.appendChild(right);
+      els.resultList.appendChild(row);
+    });
   }
-
-  details.forEach((d) => {
-    const row = document.createElement("div");
-    row.className = `result-row ${d.is_correct ? "correct" : "wrong"}`;
-
-    const left = document.createElement("span");
-    left.textContent = `${d.key}-javob`;
-
-    const right = document.createElement("span");
-    right.className = `result-status ${d.is_correct ? "correct" : "wrong"}`;
-    right.textContent = d.is_correct
-      ? `✔ To'g'ri (${d.your_answer ?? "—"})`
-      : `✘ Noto'g'ri (siz: ${d.your_answer ?? "—"}, to'g'ri: ${d.correct_answer ?? "—"})`;
-
-    row.appendChild(left);
-    row.appendChild(right);
-    els.resultList.appendChild(row);
-  });
 
   els.resultState.hidden = false;
 
