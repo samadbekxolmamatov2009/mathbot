@@ -15,7 +15,7 @@ from aiogram.types import (
 
 import database as db
 from states import Registration
-from config import COURSES, is_admin, is_boss
+from config import COURSES, DEFAULT_ADMIN_CONTACT_URL, is_admin, is_boss
 from keyboards import (
     role_keyboard,
     courses_keyboard,
@@ -38,7 +38,7 @@ import os
 from aiogram.types import FSInputFile
 
 WELCOME_STICKER_FILE_ID = (
-    "CAACAgIAAxkBAAID8WqEPP6ypYIZMHQNZdoiPD-zPvdbAAJCAAMnFEkLruH2y45Rc_g9BA"
+    "CAACAgIAAxkBAAIJCGqYQfFLh6kYEbTcdbEbW_lHKKfLAAIhDAACWngGAAGqAAHjcMwHjQw9BA"
 )
 
 # Agar stiker o'rniga oddiy rasm (jpg/png) yuborishni xohlasangiz - shu nomdagi
@@ -71,17 +71,10 @@ async def _is_subscribed(bot, user_id: int, channel: str) -> bool:
         return True
 
 
-def _subscription_gate_keyboard(channel: str, course_key: str) -> InlineKeyboardMarkup:
-    url = f"https://t.me/{channel.lstrip('@')}" if channel.startswith("@") else channel
+def _subscription_gate_keyboard(admin_url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Kanalga obuna bo'lish", url=url)],
-            [
-                InlineKeyboardButton(
-                    text="✅ Obuna bo'ldim, tekshirish",
-                    callback_data=f"check_course_sub:{course_key}",
-                )
-            ],
+            [InlineKeyboardButton(text="👤 Administrator bilan bog'lanish", url=admin_url)],
         ]
     )
 
@@ -217,34 +210,17 @@ async def process_course(callback: CallbackQuery, state: FSMContext):
 
     channel = course.get("channel")
     if channel and not await _is_subscribed(callback.bot, callback.from_user.id, channel):
+        admin_url = await db.get_setting("admin_contact_url", DEFAULT_ADMIN_CONTACT_URL)
         await callback.answer()
         await callback.message.edit_text(
-            f"🔒 <b>{course['name']}</b> kursiga ro'yxatdan o'tish uchun avval "
-            f"kanaliga obuna bo'lishingiz kerak.\n\nObuna bo'lgach, pastdagi "
-            f"\"✅ Obuna bo'ldim\" tugmasini bosing.",
+            f"🔒 Siz hali <b>{course['name']}</b> kanaliga obuna emassiz.\n\n"
+            "Ro'yxatdan o'tish uchun administrator bilan bog'laning:",
             parse_mode="HTML",
-            reply_markup=_subscription_gate_keyboard(channel, course_key),
+            reply_markup=_subscription_gate_keyboard(admin_url),
         )
         return
 
     await callback.answer()
-    await _save_course_and_continue(callback, state, course_key)
-
-
-@router.callback_query(F.data.startswith("check_course_sub:"))
-async def cb_check_course_subscription(callback: CallbackQuery, state: FSMContext):
-    course_key = callback.data.split(":", 1)[1]
-    course = COURSES[course_key]
-    channel = course.get("channel")
-
-    if channel and not await _is_subscribed(callback.bot, callback.from_user.id, channel):
-        await callback.answer(
-            "Hali obuna bo'lmagansiz. Obuna bo'lib, qaytadan urinib ko'ring.",
-            show_alert=True,
-        )
-        return
-
-    await callback.answer("✅ Obuna tasdiqlandi!")
     await _save_course_and_continue(callback, state, course_key)
 
 
