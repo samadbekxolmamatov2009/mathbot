@@ -46,6 +46,7 @@ const startMinuteEl = document.getElementById("startMinute");
 const endDateEl = document.getElementById("endDate");
 const endHourEl = document.getElementById("endHour");
 const endMinuteEl = document.getElementById("endMinute");
+const showWrongToggleEl = document.getElementById("showWrongToggle");
 const headerTitleEl = document.querySelector(".header h1");
 const resultTitleEl = document.getElementById("resultTitle");
 const resultHintEl = document.getElementById("resultHint");
@@ -210,6 +211,7 @@ async function submitTest() {
         total_questions: totalQuestions,
         start_time: getStartValue(),
         end_time: getEndValue(),
+        show_wrong_answers: showWrongToggleEl.checked,
       }),
     });
     const data = await res.json();
@@ -290,6 +292,7 @@ async function init() {
       buildQuestions(data.answers);
       updateQuestionCountLabel();
       testNameEl.value = data.name || "";
+      showWrongToggleEl.checked = data.show_wrong_answers !== false;
       const [sDate, sTime] = (data.start_time || "").split("T");
       const [eDate, eTime] = (data.end_time || "").split("T");
       if (sDate) startDateEl.value = sDate;
