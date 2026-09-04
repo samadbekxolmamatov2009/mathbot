@@ -151,7 +151,7 @@ async def delete_aplus_cancelled(callback: CallbackQuery):
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
 
-# ---------- O'quvchi: A+ kodini kiritish va Mini App'ni ochish ----------
+# ---------- O'quvchi: mavzular ro'yxatidan tanlab, Mini App'ni ochish ----------
 
 @router.message(F.text == "➕ A+ ishlash")
 async def start_aplus_flow(message: Message, state: FSMContext):
@@ -160,20 +160,30 @@ async def start_aplus_flow(message: Message, state: FSMContext):
         await message.answer("Iltimos, avval /start orqali ro'yxatdan o'ting.")
         return
 
-    await state.set_state(APlusCode.waiting_code)
-    await message.answer("🔑 Ustozingiz bergan A+ test kodini kiriting:")
-
-
-@router.message(APlusCode.waiting_code, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
-async def process_aplus_code(message: Message, state: FSMContext):
-    code = message.text.strip()
-    test = await db.get_aplus_test_by_code(code)
-
-    if not test:
-        await message.answer("❌ Bunday kod topilmadi. Qaytadan kiriting:")
+    tests = await db.get_active_aplus_tests_for_students()
+    if not tests:
+        await message.answer("Hozircha faol A+ test yo'q.")
         return
 
-    await state.clear()
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t["name"] or t["code"], callback_data=f"pick_aplus:{t['code']}")]
+            for t in tests
+        ]
+    )
+    await message.answer("➕ A+ uchun mavzuni tanlang:", reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("pick_aplus:"))
+async def pick_aplus_callback(callback: CallbackQuery, state: FSMContext):
+    code = callback.data.split(":", 1)[1]
+    test = await db.get_aplus_test_by_code(code)
+
+    if not test or not test["is_active"]:
+        await callback.answer("Bu test endi mavjud emas.", show_alert=True)
+        return
+
+    await callback.answer()
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -185,4 +195,4 @@ async def process_aplus_code(message: Message, state: FSMContext):
             ]
         ]
     )
-    await message.answer("Quyidagi tugma orqali A+ ni boshlang:", reply_markup=kb)
+    await callback.message.answer("Quyidagi tugma orqali A+ ni boshlang:", reply_markup=kb)
