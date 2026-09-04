@@ -67,8 +67,7 @@ async def handle_web_app_data(message: Message):
         await message.answer(
             f"✅ <b>Test muvaffaqiyatli {action}!</b>\n\n"
             f"{name_line}"
-            f"🔑 Kod: <code>{code}</code>\n\n"
-            "Bu kodni o'quvchilarga bering — ular \"📝 Test yuborish\" tugmasi orqali kiritishadi.",
+            "O'quvchilar \"📝 Test yuborish\" tugmasi orqali mavzuni ro'yxatdan tanlab ishlay oladi.",
             parse_mode="HTML",
             reply_markup=admin_menu_keyboard(),
         )
@@ -80,8 +79,7 @@ async def handle_web_app_data(message: Message):
         await message.answer(
             f"✅ <b>A+ test muvaffaqiyatli {action}!</b>\n\n"
             f"{name_line}"
-            f"🔑 Kod: <code>{code}</code>\n\n"
-            "Bu kodni o'quvchilarga bering — ular \"➕ A+ ishlash\" tugmasi orqali kiritishadi.",
+            "O'quvchilar \"➕ A+ ishlash\" tugmasi orqali mavzuni ro'yxatdan tanlab ishlay oladi.",
             parse_mode="HTML",
             reply_markup=admin_menu_keyboard(),
         )
@@ -192,7 +190,7 @@ async def delete_test_cancelled(callback: CallbackQuery):
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
 
-# ---------- O'quvchi: test kodini kiritish va Mini App'ni ochish ----------
+# ---------- O'quvchi: mavzular ro'yxatidan tanlab, Mini App'ni ochish ----------
 
 @router.message(F.text == "📝 Test yuborish")
 async def start_test_flow(message: Message, state: FSMContext):
@@ -201,20 +199,30 @@ async def start_test_flow(message: Message, state: FSMContext):
         await message.answer("Iltimos, avval /start orqali ro'yxatdan o'ting.")
         return
 
-    await state.set_state(TestCode.waiting_code)
-    await message.answer("🔑 Ustozingiz bergan test kodini kiriting:")
-
-
-@router.message(TestCode.waiting_code, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
-async def process_test_code(message: Message, state: FSMContext):
-    code = message.text.strip()
-    test = await db.get_test_by_code(code)
-
-    if not test:
-        await message.answer("❌ Bunday kod topilmadi. Qaytadan kiriting:")
+    tests = await db.get_active_tests_for_students()
+    if not tests:
+        await message.answer("Hozircha faol test yo'q.")
         return
 
-    await state.clear()
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t["name"] or t["code"], callback_data=f"pick_test:{t['code']}")]
+            for t in tests
+        ]
+    )
+    await message.answer("📝 Test uchun mavzuni tanlang:", reply_markup=kb)
+
+
+@router.callback_query(F.data.startswith("pick_test:"))
+async def pick_test_callback(callback: CallbackQuery, state: FSMContext):
+    code = callback.data.split(":", 1)[1]
+    test = await db.get_test_by_code(code)
+
+    if not test or not test["is_active"]:
+        await callback.answer("Bu test endi mavjud emas.", show_alert=True)
+        return
+
+    await callback.answer()
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -226,4 +234,4 @@ async def process_test_code(message: Message, state: FSMContext):
             ]
         ]
     )
-    await message.answer("Quyidagi tugma orqali testni boshlang:", reply_markup=kb)
+    await callback.message.answer("Quyidagi tugma orqali testni boshlang:", reply_markup=kb)
