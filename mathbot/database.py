@@ -6,7 +6,7 @@ from datetime import datetime
 # bir xil interfeys bergani uchun pastdagi SQL so'rovlarning birortasi
 # ham o'zgartirilishi shart emas.
 import db_backend as aiosqlite
-from timezone_utils import now_tashkent_str
+from timezone_utils import now_tashkent_str, now_tashkent_sql_str
 from config import DB_PATH
 
 
@@ -817,10 +817,10 @@ async def get_user_aplus_test_results(telegram_id: int):
 async def save_test_submission(test_id: int, telegram_id: int, answers: dict, score: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO test_submissions (test_id, telegram_id, answers, score)
-               VALUES (?, ?, ?, ?)
+            """INSERT INTO test_submissions (test_id, telegram_id, answers, score, submitted_at)
+               VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(test_id, telegram_id) DO NOTHING""",
-            (test_id, telegram_id, json.dumps(answers), score),
+            (test_id, telegram_id, json.dumps(answers), score, now_tashkent_sql_str()),
         )
         await db.commit()
 
@@ -965,10 +965,10 @@ async def has_submitted_aplus_test(test_id: int, telegram_id: int):
 async def save_aplus_submission(test_id: int, telegram_id: int, answers: dict, score: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
-            """INSERT INTO aplus_submissions (test_id, telegram_id, answers, score)
-               VALUES (?, ?, ?, ?)
+            """INSERT INTO aplus_submissions (test_id, telegram_id, answers, score, submitted_at)
+               VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(test_id, telegram_id) DO NOTHING""",
-            (test_id, telegram_id, json.dumps(answers), score),
+            (test_id, telegram_id, json.dumps(answers), score, now_tashkent_sql_str()),
         )
         await db.commit()
 
