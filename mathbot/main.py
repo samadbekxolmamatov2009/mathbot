@@ -47,7 +47,7 @@ from quiz_structure import DEFAULT_TOTAL_QUESTIONS
 from timezone_utils import now_tashkent
 from webapp.server import create_app
 
-REPORT_PATH = os.path.join(tempfile.gettempdir(), "mathbot_haftalik_hisobot.pdf")
+REPORT_PATH = os.path.join(tempfile.gettempdir(), "nazoratchi_haftalik_hisobot.pdf")
 TEST_REPORT_CHECK_INTERVAL = 60
 BROADCAST_CHECK_INTERVAL = 30
 REPORT_SCHEDULE_CHECK_INTERVAL = 30
