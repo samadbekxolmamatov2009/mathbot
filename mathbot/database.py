@@ -695,6 +695,18 @@ async def get_all_tests(limit: int = 15):
             return await cursor.fetchall()
 
 
+async def get_active_tests_for_students():
+    """O'quvchilarga mavzu sifatida ko'rsatiladigan FAOL testlar ro'yxati -
+    kod kerak emas, shuning uchun tugagan (deadline o'tgan) testlar ham
+    kiradi (kech topshirish 75% bilan hali ham mumkin)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM tests WHERE is_active = 1 ORDER BY id ASC"
+        ) as cursor:
+            return await cursor.fetchall()
+
+
 async def update_test(
     test_id: int,
     answers: dict,
@@ -864,6 +876,18 @@ async def get_all_aplus_tests(limit: int = 15):
         db.row_factory = aiosqlite.Row
         async with db.execute(
             "SELECT * FROM aplus_tests ORDER BY id DESC LIMIT ?", (limit,)
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def get_active_aplus_tests_for_students():
+    """O'quvchilarga mavzu sifatida ko'rsatiladigan FAOL A+ testlar ro'yxati -
+    kod kerak emas, tugaganlari ham kiradi (kech topshirish 75% bilan hali
+    ham mumkin)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM aplus_tests WHERE is_active = 1 ORDER BY id ASC"
         ) as cursor:
             return await cursor.fetchall()
 
