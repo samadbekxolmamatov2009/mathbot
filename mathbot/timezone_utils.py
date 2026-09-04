@@ -25,3 +25,9 @@ def now_tashkent() -> datetime:
 
 def now_tashkent_str(fmt: str = "%Y-%m-%dT%H:%M") -> str:
     return now_tashkent().strftime(fmt)
+
+
+def now_tashkent_sql_str() -> str:
+    """submitted_at/report_last_sent_at kabi qiymatlar bilan bir xil formatda
+    ("T" ajratuvchi bilan) solishtirilishi uchun - O'ZBEKISTON vaqti bo'yicha."""
+    return now_tashkent().strftime("%Y-%m-%dT%H:%M:%S")
