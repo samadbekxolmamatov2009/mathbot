@@ -117,6 +117,8 @@ function renderQuestions() {
 
     const input = document.createElement("input");
     input.type = "text";
+    input.readOnly = true;
+    input.inputMode = "none";
     input.className = "aplus-input";
     input.placeholder = "Javobingiz";
     input.addEventListener("input", () => {
