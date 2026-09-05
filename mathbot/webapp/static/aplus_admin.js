@@ -92,6 +92,8 @@ function buildFieldRow(key, prefillValue) {
 
   const input = document.createElement("input");
   input.type = "text";
+  input.readOnly = true;
+  input.inputMode = "none";
   input.className = "aplus-input";
   input.placeholder = "Javob";
   input.value = prefillValue || "";
