@@ -68,7 +68,7 @@ async def init_db():
         if "report_sent" not in existing_columns:
             await db.execute("ALTER TABLE tests ADD COLUMN report_sent INTEGER DEFAULT 0")
         if "total_questions" not in existing_columns:
-            await db.execute("ALTER TABLE tests ADD COLUMN total_questions INTEGER DEFAULT 35")
+            await db.execute("ALTER TABLE tests ADD COLUMN total_questions INTEGER DEFAULT 30")
         if "show_wrong_answers" not in existing_columns:
             await db.execute("ALTER TABLE tests ADD COLUMN show_wrong_answers INTEGER DEFAULT 1")
 
@@ -655,7 +655,7 @@ async def create_test(
     start_time: str,
     end_time: str,
     name: str = "",
-    total_questions: int = 35,
+    total_questions: int = 30,
     show_wrong_answers: bool = True,
 ) -> int:
     async with aiosqlite.connect(DB_PATH) as db:
@@ -713,7 +713,7 @@ async def update_test(
     start_time: str,
     end_time: str,
     name: str = "",
-    total_questions: int = 35,
+    total_questions: int = 30,
     show_wrong_answers: bool = True,
 ):
     async with aiosqlite.connect(DB_PATH) as db:
@@ -741,6 +741,15 @@ async def delete_test(test_id: int) -> bool:
         cursor = await db.execute("DELETE FROM tests WHERE id = ?", (test_id,))
         await db.commit()
         return cursor.rowcount > 0
+
+
+async def delete_all_tests() -> int:
+    """BARCHA oddiy testlarni va ularning natijalarini butunlay o'chiradi. Qaytariladi: nechta test o'chirilgani."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM test_submissions")
+        cursor = await db.execute("DELETE FROM tests")
+        await db.commit()
+        return cursor.rowcount
 
 
 async def get_tests_pending_report():
@@ -917,6 +926,15 @@ async def delete_aplus_test(test_id: int) -> bool:
         cursor = await db.execute("DELETE FROM aplus_tests WHERE id = ?", (test_id,))
         await db.commit()
         return cursor.rowcount > 0
+
+
+async def delete_all_aplus_tests() -> int:
+    """BARCHA A+ testlarni va ularning natijalarini butunlay o'chiradi. Qaytariladi: nechta test o'chirilgani."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM aplus_submissions")
+        cursor = await db.execute("DELETE FROM aplus_tests")
+        await db.commit()
+        return cursor.rowcount
 
 
 async def get_aplus_tests_pending_report():
