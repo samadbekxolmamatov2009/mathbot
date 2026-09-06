@@ -17,6 +17,20 @@
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* Oddiy admin uchun - Boss'dan farqli o'laroq - Telegram mavzusidan qat'iy
+   nazar har doim OCH (yorug') fon. Qaysi mini app bu klassni qo'shishini
+   admin.js/aplus_admin.js hal qiladi (?role= parametriga qarab). */
+body.force-light {
+  --bg: #f4f7fb;
+  --secondary-bg: #eaf0f7;
+  --card-bg: #ffffff;
+  --text: #1c2b3a;
+  --hint: #7c8b9b;
+  --accent: #3d6ea5;
+  --accent-text: #ffffff;
+  --border: rgba(60, 90, 120, 0.14);
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
