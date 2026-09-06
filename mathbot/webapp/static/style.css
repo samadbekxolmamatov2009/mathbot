@@ -360,14 +360,19 @@ button {
 .aplus-input {
   flex: 1;
   min-width: 0;
-  min-height: 20px;
+  height: 36px;
+  box-sizing: border-box;
   padding: 8px 10px;
   font-size: 14px;
+  line-height: 1.2;
   border: 1.5px solid var(--border);
   border-radius: 8px;
   color: var(--text);
   background: var(--secondary-bg);
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
   white-space: pre-wrap;
   word-break: break-all;
   user-select: none;
