@@ -1,5 +1,12 @@
 // Oddiy matematik klaviatura komponenti (A+ yozma javobli testlar uchun).
-// createMathKeyboard(mountEl) -> { toggle(inputEl, toggleBtnEl), hide(), isOpen }
+// createMathKeyboard(mountEl) -> { toggle(fieldEl, toggleBtnEl), show(fieldEl, toggleBtnEl), hide(), isOpen }
+//
+// MUHIM: fieldEl HAQIQIY <input> EMAS, oddiy <div>/<span> (matn ko'rsatuvchi,
+// "value" o'rniga fieldEl.dataset.value ishlatiladi). Bu ataylab shunday -
+// haqiqiy <input>'ga fokus berilsa, ba'zi telefonlarda (ayniqsa iOS'da)
+// "readonly" bo'lishiga qaramay tabiiy klaviatura baribir ochilib qolar edi.
+// <div> hech qachon klaviatura chiqarmaydi, chunki u umuman tahrirlanadigan
+// matn kiritish elementi emas.
 
 function createMathKeyboard(mountEl) {
   const TABS = {
@@ -11,7 +18,7 @@ function createMathKeyboard(mountEl) {
   const TAB_LABELS = { "123": "123", belgi: "√ ± ( )", harf: "abc", yun: "αβγ" };
 
   let activeTab = "123";
-  let activeInput = null;
+  let activeField = null;
 
   const root = document.createElement("div");
   root.className = "math-keyboard";
@@ -36,37 +43,24 @@ function createMathKeyboard(mountEl) {
   const gridEl = document.createElement("div");
   gridEl.className = "math-keyboard-grid";
 
-  function dispatchInput(el) {
+  function getValue(el) {
+    return el.dataset.value || "";
+  }
+
+  function setValue(el, value) {
+    el.dataset.value = value;
+    el.textContent = value;
     el.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   function insertAtCursor(text) {
-    if (!activeInput) return;
-    const el = activeInput;
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    el.value = el.value.slice(0, start) + text + el.value.slice(end);
-    const pos = start + text.length;
-    el.focus();
-    el.setSelectionRange(pos, pos);
-    dispatchInput(el);
+    if (!activeField) return;
+    setValue(activeField, getValue(activeField) + text);
   }
 
   function backspace() {
-    if (!activeInput) return;
-    const el = activeInput;
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    if (start === end && start > 0) {
-      el.value = el.value.slice(0, start - 1) + el.value.slice(end);
-      el.focus();
-      el.setSelectionRange(start - 1, start - 1);
-    } else {
-      el.value = el.value.slice(0, start) + el.value.slice(end);
-      el.focus();
-      el.setSelectionRange(start, start);
-    }
-    dispatchInput(el);
+    if (!activeField) return;
+    setValue(activeField, getValue(activeField).slice(0, -1));
   }
 
   function renderGrid() {
@@ -103,43 +97,38 @@ function createMathKeyboard(mountEl) {
   root.appendChild(footerEl);
   mountEl.appendChild(root);
 
-  function show(inputEl, toggleBtn) {
-    if (activeInput && activeInput._kbdBtn) {
-      activeInput._kbdBtn.classList.remove("active");
+  function show(fieldEl, toggleBtn) {
+    if (activeField) activeField.classList.remove("aplus-input-focused");
+    if (activeField && activeField._kbdBtn) {
+      activeField._kbdBtn.classList.remove("active");
     }
-    activeInput = inputEl;
-    activeInput._kbdBtn = toggleBtn || null;
+    activeField = fieldEl;
+    activeField.classList.add("aplus-input-focused");
+    activeField._kbdBtn = toggleBtn || null;
     if (toggleBtn) toggleBtn.classList.add("active");
     root.hidden = false;
   }
 
   function hide() {
-    if (activeInput && activeInput._kbdBtn) activeInput._kbdBtn.classList.remove("active");
-    activeInput = null;
+    if (activeField) {
+      activeField.classList.remove("aplus-input-focused");
+      if (activeField._kbdBtn) activeField._kbdBtn.classList.remove("active");
+    }
+    activeField = null;
     root.hidden = true;
   }
 
-  function toggle(inputEl, toggleBtn) {
-    if (!root.hidden && activeInput === inputEl) {
+  function toggle(fieldEl, toggleBtn) {
+    if (!root.hidden && activeField === fieldEl) {
       hide();
     } else {
-      show(inputEl, toggleBtn);
-    }
-  }
-
-  function focusInput(inputEl, toggleBtn) {
-    // Klaviatura ochiq bo'lsa, foydalanuvchi boshqa inputga to'g'ridan-to'g'ri
-    // (⌨ tugmasini bosmasdan) o'tganda ham, klaviatura O'SHA yangi inputga
-    // yozishni davom ettirishi uchun - hech qachon yashirmaydi, faqat
-    // "faol input"ni yangilaydi.
-    if (!root.hidden && activeInput !== inputEl) {
-      show(inputEl, toggleBtn);
+      show(fieldEl, toggleBtn);
     }
   }
 
   return {
+    show,
     toggle,
-    focusInput,
     hide,
     get isOpen() {
       return !root.hidden;
