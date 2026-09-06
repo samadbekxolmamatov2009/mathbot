@@ -102,6 +102,8 @@ function buildFieldRow(key, prefillValue) {
     row.classList.toggle("answered", !!input.value.trim());
     updateProgress();
   });
+  input.addEventListener("keydown", (e) => e.preventDefault());
+  input.addEventListener("paste", (e) => e.preventDefault());
   row.appendChild(input);
 
   const kbdBtn = document.createElement("button");
