@@ -5,6 +5,13 @@ tg.expand();
 const params = new URLSearchParams(location.search);
 const editId = params.get("edit");
 
+// Dizayn: Boss doimiy (qorong'i) mavzuni ko'radi, oddiy admin esa har doim
+// OCH (yorug') fonda ko'radi - Telegram'ning shaxsiy mavzusidan qat'iy
+// nazar. Bot havolaga ?role=admin yoki ?role=boss qo'shib beradi.
+if (params.get("role") !== "boss") {
+  document.body.classList.add("force-light");
+}
+
 const answers = {};
 let questionCount = 1;
 const listEl = document.getElementById("questionList");
