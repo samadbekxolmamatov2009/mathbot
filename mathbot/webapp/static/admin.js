@@ -20,13 +20,11 @@ tg.expand();
   }).catch(() => {});
 })();
 
-const DEFAULT_TOTAL_QUESTIONS = 35;
+const DEFAULT_TOTAL_QUESTIONS = 30;
 const MIN_QUESTIONS = 1;
-const EXTENDED_FROM = 33;
-const EXTENDED_TO = 35;
 
 function optionsFor(q) {
-  return q >= EXTENDED_FROM && q <= EXTENDED_TO ? ["A", "B", "C", "D", "E"] : ["A", "B", "C", "D"];
+  return ["A", "B", "C", "D"];
 }
 
 const params = new URLSearchParams(location.search);
