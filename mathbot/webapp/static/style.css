@@ -7,6 +7,10 @@
   --accent: var(--tg-theme-button-color, #3d6ea5);
   --accent-text: var(--tg-theme-button-text-color, #ffffff);
   --border: rgba(60, 90, 120, 0.12);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent) 26%, transparent);
+  --radius-lg: 16px;
+  --radius-md: 11px;
   --correct: #2fa360;
   --wrong: #e0503b;
   --safe-top: env(safe-area-inset-top, 0px);
@@ -153,14 +157,14 @@ button {
   gap: 12px;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px 12px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .question-card.answered {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
 }
 
 .q-number {
@@ -195,7 +199,7 @@ button {
 }
 
 .option-btn:active {
-  transform: scale(0.9);
+  transform: scale(0.88);
 }
 
 .option-btn.selected {
@@ -217,8 +221,8 @@ button {
 .submit-btn {
   width: 100%;
   border: none;
-  border-radius: 14px;
-  padding: 14px;
+  border-radius: var(--radius-lg);
+  padding: 15px;
   font-size: 15.5px;
   font-weight: 700;
   background: var(--accent);
@@ -245,22 +249,40 @@ button {
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 20px 0 6px;
+  padding: 24px 0 6px;
+}
+
+@keyframes score-pop {
+  from {
+    transform: scale(0.7);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .score-ring {
-  width: 128px;
-  height: 128px;
+  width: 136px;
+  height: 136px;
   border-radius: 50%;
   background: conic-gradient(var(--accent) calc(var(--pct, 0) * 1%), var(--secondary-bg) 0);
   display: flex;
   align-items: center;
   justify-content: center;
+  animation: score-pop 0.5s cubic-bezier(0.2, 0.8, 0.3, 1.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .score-ring {
+    animation: none;
+  }
 }
 
 .score-ring-inner {
-  width: 100px;
-  height: 100px;
+  width: 106px;
+  height: 106px;
   border-radius: 50%;
   background: var(--card-bg);
   display: flex;
@@ -335,20 +357,20 @@ button {
   gap: 8px;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 10px 12px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
 .aplus-row.answered {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 1px var(--accent) inset;
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
 }
 
 .aplus-badge {
   min-width: 34px;
   padding: 6px 0;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--accent);
   color: var(--accent-text);
   font-size: 12px;
@@ -362,11 +384,11 @@ button {
   min-width: 0;
   height: 44px;
   box-sizing: border-box;
-  padding: 8px 10px;
+  padding: 8px 12px;
   font-size: 14px;
   line-height: 1.2;
   border: 1.5px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   color: var(--text);
   background: var(--secondary-bg);
   cursor: pointer;
@@ -377,6 +399,7 @@ button {
   word-break: break-all;
   user-select: none;
   -webkit-user-select: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .aplus-input:empty::before {
@@ -386,13 +409,14 @@ button {
 
 .aplus-input.aplus-input-focused {
   border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .aplus-kbd-btn {
   flex-shrink: 0;
   width: 44px;
   height: 44px;
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   border: 1.5px solid var(--border);
   background: var(--secondary-bg);
   color: var(--text);
@@ -401,6 +425,11 @@ button {
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.aplus-kbd-btn:active {
+  transform: scale(0.9);
 }
 
 .aplus-kbd-btn.active {
@@ -497,20 +526,22 @@ button {
 }
 
 .header {
-  padding: 16px 16px 4px;
+  padding: 18px 16px 6px;
   text-align: center;
 }
 
 .header h1 {
   margin: 0 0 8px;
-  font-size: 20px;
+  font-size: 21px;
   font-weight: 800;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
 }
 
 .header p {
-  margin: 0;
+  margin: 0 auto;
+  max-width: 320px;
   font-size: 13.5px;
+  line-height: 1.5;
   color: var(--hint);
 }
 
@@ -525,9 +556,9 @@ button {
 }
 
 .count-btn {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
   border: 1.5px solid var(--border);
   background: var(--card-bg);
   color: var(--text);
@@ -537,6 +568,11 @@ button {
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+.count-btn:active {
+  transform: scale(0.9);
 }
 
 .count-btn:disabled {
@@ -545,10 +581,10 @@ button {
 
 .time-field {
   margin: 0 16px 12px;
-  padding: 14px;
+  padding: 14px 16px;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-lg);
 }
 
 .time-field label,
@@ -564,14 +600,22 @@ button {
 .time-field input[type="date"],
 .time-field select {
   box-sizing: border-box;
-  height: 40px;
-  padding: 0 10px;
+  height: 42px;
+  padding: 0 12px;
   font-size: 14px;
   font-family: inherit;
   color: var(--text);
   background: var(--secondary-bg);
   border: 1.5px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease;
+}
+
+.time-field input[type="text"]:focus,
+.time-field input[type="date"]:focus,
+.time-field select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 .time-field input[type="text"] {
@@ -646,6 +690,7 @@ button {
   height: 20px;
   border-radius: 50%;
   background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s ease;
 }
 
