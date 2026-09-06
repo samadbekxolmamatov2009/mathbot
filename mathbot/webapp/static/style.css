@@ -360,7 +360,7 @@ button {
 .aplus-input {
   flex: 1;
   min-width: 0;
-  height: 36px;
+  height: 44px;
   box-sizing: border-box;
   padding: 8px 10px;
   font-size: 14px;
@@ -390,8 +390,8 @@ button {
 
 .aplus-kbd-btn {
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 8px;
   border: 1.5px solid var(--border);
   background: var(--secondary-bg);
