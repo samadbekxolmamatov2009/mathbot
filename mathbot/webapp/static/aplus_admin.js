@@ -90,20 +90,18 @@ function buildFieldRow(key, prefillValue) {
   badge.textContent = key;
   row.appendChild(badge);
 
-  const input = document.createElement("input");
-  input.type = "text";
-  input.readOnly = true;
-  input.inputMode = "none";
+  const input = document.createElement("div");
+  input.tabIndex = 0;
   input.className = "aplus-input";
-  input.placeholder = "Javob";
-  input.value = prefillValue || "";
+  input.dataset.value = prefillValue || "";
+  input.textContent = prefillValue || "";
+  input.dataset.placeholder = "Javob";
   input.addEventListener("input", () => {
-    answers[key] = input.value;
-    row.classList.toggle("answered", !!input.value.trim());
+    const value = input.dataset.value || "";
+    answers[key] = value;
+    row.classList.toggle("answered", !!value.trim());
     updateProgress();
   });
-  input.addEventListener("keydown", (e) => e.preventDefault());
-  input.addEventListener("paste", (e) => e.preventDefault());
   row.appendChild(input);
 
   const kbdBtn = document.createElement("button");
@@ -113,7 +111,13 @@ function buildFieldRow(key, prefillValue) {
   kbdBtn.addEventListener("click", () => mathKeyboard.toggle(input, kbdBtn));
   row.appendChild(kbdBtn);
 
-  input.addEventListener("focus", () => mathKeyboard.show(input, kbdBtn));
+  input.addEventListener("click", () => mathKeyboard.show(input, kbdBtn));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      mathKeyboard.show(input, kbdBtn);
+    }
+  });
 
   if (prefillValue) {
     answers[key] = prefillValue;
