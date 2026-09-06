@@ -483,3 +483,182 @@ button {
   font-size: 13px;
   font-weight: 700;
 }
+
+/* ---------- Sarlavha, "Test ma'lumotlari" formasi (nom/vaqt/sozlamalar) ----------
+   Bu bo'lim avvalgi tahrirlardan birida faylga tushib qolmagan edi - shu
+   sabab "Test ma'lumotlari" ekrani butunlay uslubsiz (brauzer standart
+   ko'rinishida) chiqib qolgan edi. */
+
+.progress {
+  padding: 10px 16px 0;
+  font-size: 13px;
+  color: var(--hint);
+  text-align: center;
+}
+
+.header {
+  padding: 16px 16px 4px;
+  text-align: center;
+}
+
+.header h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+
+.header p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--hint);
+}
+
+.question-count-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.count-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.count-btn:disabled {
+  opacity: 0.4;
+}
+
+.time-field {
+  margin: 0 16px 12px;
+  padding: 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+}
+
+.time-field label,
+.time-field .settings-label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.time-field input[type="text"],
+.time-field input[type="date"],
+.time-field select {
+  box-sizing: border-box;
+  height: 40px;
+  padding: 0 10px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--secondary-bg);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+}
+
+.time-field input[type="text"] {
+  width: 100%;
+}
+
+.time-field input[type="text"]::placeholder {
+  color: var(--hint);
+}
+
+.datetime-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.datetime-row input[type="date"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.datetime-row select {
+  width: 64px;
+  text-align: center;
+}
+
+.time-sep {
+  font-weight: 700;
+  color: var(--hint);
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-row .settings-label {
+  margin-bottom: 0;
+  flex: 1;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: 999px;
+  transition: background 0.15s ease;
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.15s ease;
+}
+
+.switch input:checked + .switch-slider {
+  background: var(--accent);
+}
+
+.switch input:checked + .switch-slider::before {
+  transform: translateX(18px);
+}
+
+.result-score {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
