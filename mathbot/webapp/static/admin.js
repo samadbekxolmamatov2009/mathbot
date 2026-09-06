@@ -2,6 +2,13 @@ const tg = window.Telegram.WebApp;
 tg.ready();
 tg.expand();
 
+// Dizayn: Boss doimiy (qorong'i) mavzuni ko'radi, oddiy admin esa har doim
+// OCH (yorug') fonda ko'radi - Telegram'ning shaxsiy mavzusidan qat'iy
+// nazar. Bot havolaga ?role=admin yoki ?role=boss qo'shib beradi.
+if (new URLSearchParams(location.search).get("role") !== "boss") {
+  document.body.classList.add("force-light");
+}
+
 (function () {
   const info = {
     initData_len: tg.initData.length,
