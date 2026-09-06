@@ -140,7 +140,7 @@ function selectAnswer(q, letter, row, optsEl) {
 
 function buildQuestionRow(q, prefillLetter) {
   const row = document.createElement("div");
-  row.className = "question-row";
+  row.className = "question-card";
 
   const numEl = document.createElement("div");
   numEl.className = "q-number";
