@@ -115,25 +115,18 @@ function renderQuestions() {
     badge.textContent = key;
     row.appendChild(badge);
 
-    const input = document.createElement("input");
-    input.type = "text";
-    input.readOnly = true;
-    input.inputMode = "none";
+    const input = document.createElement("div");
+    input.tabIndex = 0;
     input.className = "aplus-input";
-    input.placeholder = "Javobingiz";
+    input.dataset.value = "";
+    input.dataset.placeholder = "Javobingiz";
     input.addEventListener("input", () => {
-      answers[key] = input.value;
-      row.classList.toggle("answered", !!input.value.trim());
+      const value = input.dataset.value || "";
+      answers[key] = value;
+      row.classList.toggle("answered", !!value.trim());
       haptic();
       updateProgress();
     });
-    // readOnly mobil klaviaturani yashiradi, lekin kompyuterda fizik
-    // klaviaturadan yozish hali ham mumkin bo'lishi mumkin - shuning uchun
-    // har qanday tugma bosilishini ham to'liq bloklaymiz. Faqat bizning
-    // maxsus klaviaturamiz (JS orqali .value'ni to'g'ridan-to'g'ri
-    // o'zgartiradi) ishlaydi.
-    input.addEventListener("keydown", (e) => e.preventDefault());
-    input.addEventListener("paste", (e) => e.preventDefault());
     row.appendChild(input);
 
     const kbdBtn = document.createElement("button");
@@ -144,9 +137,18 @@ function renderQuestions() {
     row.appendChild(kbdBtn);
 
     // Foydalanuvchi ⌨ tugmasini bosmasdan, to'g'ridan-to'g'ri boshqa
-    // inputga o'tsa (masalan 1a'dan 1b'ga) ham, klaviatura ochiq bo'lsa -
-    // shu yangi inputga "ergashadi".
-    input.addEventListener("focus", () => mathKeyboard.focusInput(input, kbdBtn));
+    // maydonga o'tsa (masalan 1a'dan 1b'ga) ham, klaviatura ochiq bo'lsa -
+    // shu yangi maydonga "ergashadi". <div> haqiqiy input emasligi uchun
+    // "focus" o'rniga "click"/"pointerdown" ishlatiladi - telefon yoki
+    // kompyuterning o'z klaviaturasi HECH QACHON ochilmaydi, faqat
+    // bizning maxsus klaviaturamiz ishlaydi.
+    input.addEventListener("click", () => mathKeyboard.focusInput(input, kbdBtn));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        mathKeyboard.focusInput(input, kbdBtn);
+      }
+    });
 
     frag.appendChild(row);
   });
