@@ -127,6 +127,13 @@ function renderQuestions() {
       haptic();
       updateProgress();
     });
+    // readOnly mobil klaviaturani yashiradi, lekin kompyuterda fizik
+    // klaviaturadan yozish hali ham mumkin bo'lishi mumkin - shuning uchun
+    // har qanday tugma bosilishini ham to'liq bloklaymiz. Faqat bizning
+    // maxsus klaviaturamiz (JS orqali .value'ni to'g'ridan-to'g'ri
+    // o'zgartiradi) ishlaydi.
+    input.addEventListener("keydown", (e) => e.preventDefault());
+    input.addEventListener("paste", (e) => e.preventDefault());
     row.appendChild(input);
 
     const kbdBtn = document.createElement("button");
