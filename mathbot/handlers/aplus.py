@@ -87,6 +87,9 @@ async def _build_aplus_list():
                 ),
             ]
         )
+    kb_rows.append(
+        [InlineKeyboardButton(text="🗑🗑 Barcha A+ testni o'chirish", callback_data="aplus_delete_all_ask")]
+    )
     return "\n".join(lines), InlineKeyboardMarkup(inline_keyboard=kb_rows)
 
 
@@ -145,6 +148,50 @@ async def delete_aplus_confirmed(callback: CallbackQuery):
 
 @router.callback_query(F.data == "aplus_delete_no")
 async def delete_aplus_cancelled(callback: CallbackQuery):
+    await callback.answer("Bekor qilindi.")
+
+    text, kb = await _build_aplus_list()
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+@router.callback_query(F.data == "aplus_delete_all_ask")
+async def ask_delete_all_aplus(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Sizda ruxsat yo'q.", show_alert=True)
+        return
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Ha, BARCHASINI o'chirish", callback_data="aplus_delete_all_confirm"),
+                InlineKeyboardButton(text="❌ Yo'q", callback_data="aplus_delete_all_no"),
+            ]
+        ]
+    )
+    await callback.message.edit_text(
+        "⚠️ <b>DIQQAT!</b> Barcha A+ testlarni va ularning barcha natijalarini "
+        "butunlay o'chirmoqchimisiz?\nBu amalni orqaga qaytarib bo'lmaydi.",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "aplus_delete_all_confirm")
+async def delete_all_aplus_confirmed(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Sizda ruxsat yo'q.", show_alert=True)
+        return
+
+    count = await db.delete_all_aplus_tests()
+    await callback.answer(f"🗑 {count} ta A+ test o'chirildi.", show_alert=True)
+
+    text, kb = await _build_aplus_list()
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+@router.callback_query(F.data == "aplus_delete_all_no")
+async def delete_all_aplus_cancelled(callback: CallbackQuery):
     await callback.answer("Bekor qilindi.")
 
     text, kb = await _build_aplus_list()
