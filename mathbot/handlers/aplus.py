@@ -12,7 +12,7 @@ from aiogram.types import (
 
 import database as db
 from timezone_utils import now_tashkent_str
-from config import WEBAPP_URL, TEST_WEBAPP_URL, is_admin
+from config import WEBAPP_URL, TEST_WEBAPP_URL, is_admin, is_boss
 from states import APlusCode
 from keyboards import NAV_BUTTON_TEXTS
 
@@ -22,6 +22,13 @@ router.callback_query.filter(F.message.chat.type == "private")
 
 WEBAPP_BASE = WEBAPP_URL.rstrip("/")
 TEST_WEBAPP_BASE = TEST_WEBAPP_URL.rstrip("/")
+
+
+def _role_param(user_id: int) -> str:
+    """Admin Mini App'ining dizayni Boss va oddiy admin uchun har xil bo'lishi
+    uchun - Boss doimiy (qorong'i) dizaynni ko'radi, oddiy admin esa doim
+    OCH (yorug') fonda ko'radi, Telegram'ning o'z mavzusidan qat'iy nazar."""
+    return "boss" if is_boss(user_id) else "admin"
 
 
 # ---------- Admin: A+ testini Mini App orqali yaratish ----------
@@ -36,7 +43,9 @@ async def open_admin_aplus_app(message: Message):
             [
                 InlineKeyboardButton(
                     text="➕ A+ savollarini kiritish",
-                    web_app=WebAppInfo(url=f"{WEBAPP_BASE}/aplus_admin.html?t={int(time.time())}"),
+                    web_app=WebAppInfo(
+                        url=f"{WEBAPP_BASE}/aplus_admin.html?role={_role_param(message.from_user.id)}&t={int(time.time())}"
+                    ),
                 )
             ]
         ]
@@ -59,11 +68,12 @@ def _aplus_status_label(test) -> str:
     return "🟢 Faol"
 
 
-async def _build_aplus_list():
+async def _build_aplus_list(user_id: int):
     tests = await db.get_all_aplus_tests(limit=15)
     if not tests:
         return "Hozircha birorta A+ test yaratilmagan.", None
 
+    role = _role_param(user_id)
     lines = ["🗂 <b>A+ testlar ro'yxati</b> (oxirgi 15 tasi):"]
     kb_rows = []
     for t in tests:
@@ -78,7 +88,7 @@ async def _build_aplus_list():
                 InlineKeyboardButton(
                     text=f"✏️ {t['code']}",
                     web_app=WebAppInfo(
-                        url=f"{WEBAPP_BASE}/aplus_admin.html?edit={t['id']}&t={int(time.time())}"
+                        url=f"{WEBAPP_BASE}/aplus_admin.html?edit={t['id']}&role={role}&t={int(time.time())}"
                     ),
                 ),
                 InlineKeyboardButton(
@@ -98,7 +108,7 @@ async def list_aplus_tests(message: Message):
     if not is_admin(message.from_user.id):
         return
 
-    text, kb = await _build_aplus_list()
+    text, kb = await _build_aplus_list(message.from_user.id)
     await message.answer(text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -142,7 +152,7 @@ async def delete_aplus_confirmed(callback: CallbackQuery):
     await db.delete_aplus_test(test_id)
     await callback.answer("🗑 Test o'chirildi.")
 
-    text, kb = await _build_aplus_list()
+    text, kb = await _build_aplus_list(callback.from_user.id)
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -150,7 +160,7 @@ async def delete_aplus_confirmed(callback: CallbackQuery):
 async def delete_aplus_cancelled(callback: CallbackQuery):
     await callback.answer("Bekor qilindi.")
 
-    text, kb = await _build_aplus_list()
+    text, kb = await _build_aplus_list(callback.from_user.id)
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -186,7 +196,7 @@ async def delete_all_aplus_confirmed(callback: CallbackQuery):
     count = await db.delete_all_aplus_tests()
     await callback.answer(f"🗑 {count} ta A+ test o'chirildi.", show_alert=True)
 
-    text, kb = await _build_aplus_list()
+    text, kb = await _build_aplus_list(callback.from_user.id)
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
 
@@ -194,7 +204,7 @@ async def delete_all_aplus_confirmed(callback: CallbackQuery):
 async def delete_all_aplus_cancelled(callback: CallbackQuery):
     await callback.answer("Bekor qilindi.")
 
-    text, kb = await _build_aplus_list()
+    text, kb = await _build_aplus_list(callback.from_user.id)
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
 
