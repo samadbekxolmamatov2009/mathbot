@@ -262,6 +262,42 @@ async def main():
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
 
+    # ---------- DIAGNOSTIKA (botning ishini O'ZGARTIRMAYDI, faqat logga yozadi) ----------
+    # 1) Har bir kelgan xabar: kimdan (user id) va nima yozildi.
+    @dp.update.outer_middleware()
+    async def _log_incoming(handler, event, data):
+        u = None
+        text = None
+        if event.message:
+            u = event.message.from_user
+            text = event.message.text or f"<{event.message.content_type}>"
+        elif event.callback_query:
+            u = event.callback_query.from_user
+            text = f"<tugma: {event.callback_query.data}>"
+        logging.info("KELDI: user=%s (@%s) -> %r", u.id if u else "?", u.username if u else "?", text)
+        return await handler(event, data)
+
+    # 2) Bot Telegram'ga yuborgan har bir so'rov va, eng muhimi, XATOLARI -
+    #    kod ichida "except: pass" bilan yashirilgan xatolar ham shu yerda ko'rinadi.
+    from aiogram.client.session.middlewares.base import BaseRequestMiddleware
+
+    class _LogOutgoing(BaseRequestMiddleware):
+        async def __call__(self, make_request, bot_, method):
+            name = type(method).__name__
+            if name == "GetUpdates":
+                return await make_request(bot_, method)
+            chat = getattr(method, "chat_id", None) or getattr(method, "user_id", None)
+            try:
+                result = await make_request(bot_, method)
+                logging.info("YUBORILDI: %s -> %s OK", name, chat)
+                return result
+            except Exception as e:
+                logging.error("YUBORILMADI: %s -> %s | %s: %s", name, chat, type(e).__name__, e)
+                raise
+
+    bot.session.middleware(_LogOutgoing())
+    # ---------- DIAGNOSTIKA tugadi ----------
+
     # Ro'yxatdan o'tgan foydalanuvchilarning kanal obunasini davomiy
     # tekshiradi - kanaldan chiqarib yuborilganlarni avtomatik "ro'yxatdan
     # chiqaradi" (qarang: middlewares.py).
