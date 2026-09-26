@@ -701,8 +701,12 @@ async def get_active_tests_for_students():
     kiradi (kech topshirish 75% bilan hali ham mumkin)."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
+        # Boshlanish vaqti hali kelmagan testlar ro'yxatda ko'rinmaydi.
         async with db.execute(
-            "SELECT * FROM tests WHERE is_active = 1 ORDER BY id ASC"
+            """SELECT * FROM tests
+               WHERE is_active = 1 AND (start_time IS NULL OR start_time <= ?)
+               ORDER BY id ASC""",
+            (now_tashkent_str(),),
         ) as cursor:
             return await cursor.fetchall()
 
@@ -895,8 +899,12 @@ async def get_active_aplus_tests_for_students():
     ham mumkin)."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
+        # Boshlanish vaqti hali kelmagan testlar ro'yxatda ko'rinmaydi.
         async with db.execute(
-            "SELECT * FROM aplus_tests WHERE is_active = 1 ORDER BY id ASC"
+            """SELECT * FROM aplus_tests
+               WHERE is_active = 1 AND (start_time IS NULL OR start_time <= ?)
+               ORDER BY id ASC""",
+            (now_tashkent_str(),),
         ) as cursor:
             return await cursor.fetchall()
 
@@ -1246,10 +1254,17 @@ async def get_submissions_since(since_iso: str):
 # ---------- Yangi faollashtirilgan mavzular haqida xabar berish ----------
 
 async def get_unnotified_tests():
+    # Xabar faqat test BOSHLANISH vaqti kelganda yuborilishi kerak - aks holda
+    # admin kelajakdagi vaqtga test yaratishi bilanoq o'quvchilarga
+    # "faollashtirildi" xabari ketib qolardi.
+    now = now_tashkent_str()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM tests WHERE is_active = 1 AND (notified IS NULL OR notified = 0)"
+            """SELECT * FROM tests
+               WHERE is_active = 1 AND (notified IS NULL OR notified = 0)
+                 AND (start_time IS NULL OR start_time <= ?)""",
+            (now,),
         ) as cursor:
             return await cursor.fetchall()
 
@@ -1261,10 +1276,17 @@ async def mark_test_notified(test_id: int):
 
 
 async def get_unnotified_aplus_tests():
+    # Xabar faqat test BOSHLANISH vaqti kelganda yuborilishi kerak - aks holda
+    # admin kelajakdagi vaqtga test yaratishi bilanoq o'quvchilarga
+    # "faollashtirildi" xabari ketib qolardi.
+    now = now_tashkent_str()
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
-            "SELECT * FROM aplus_tests WHERE is_active = 1 AND (notified IS NULL OR notified = 0)"
+            """SELECT * FROM aplus_tests
+               WHERE is_active = 1 AND (notified IS NULL OR notified = 0)
+                 AND (start_time IS NULL OR start_time <= ?)""",
+            (now,),
         ) as cursor:
             return await cursor.fetchall()
 
