@@ -28,31 +28,14 @@ class SubscriptionCheckMiddleware(BaseMiddleware):
         if user is None or user.id in ADMIN_IDS or user.id in BOSS_IDS:
             return await handler(event, data)
 
-        # MUHIM: obuna tekshiruvining O'ZIDA (baza, Telegram API) har qanday
-        # xato bo'lsa ham foydalanuvchi JAVOBSIZ qolmasligi kerak. Avval bu
-        # yerdagi xato handler'ni butunlay to'xtatib qo'yardi - oddiy userlar
-        # botdan hech qanday javob olmasdi, Boss/admin esa bu tekshiruvdan
-        # o'tmagani uchun bot "ishlayapti" deb ko'rinardi.
-        try:
-            allowed = await self._check(user, event, data)
-        except Exception:
-            logging.exception("Obuna middleware'ida kutilmagan xato (user: %s)", user.id)
-            allowed = True
-        if not allowed:
-            return
-        return await handler(event, data)
-
-    async def _check(self, user, event, data) -> bool:
-        """True - handler ishlasin, False - foydalanuvchi kanaldan chiqarilgan."""
-
         db_user = await db.get_user(user.id)
         if not db_user or not db_user["is_registered"]:
-            return True
+            return await handler(event, data)
 
         course_key = db_user["course"]
         channel = COURSES.get(course_key, {}).get("channel") if course_key else None
         if not channel:
-            return True
+            return await handler(event, data)
 
         checked_at = db_user["subscription_checked_at"]
         if checked_at:
@@ -61,7 +44,7 @@ class SubscriptionCheckMiddleware(BaseMiddleware):
 
                 elapsed = (now_tashkent() - datetime.fromisoformat(checked_at)).total_seconds()
                 if elapsed < SUBSCRIPTION_RECHECK_INTERVAL_SECONDS:
-                    return True
+                    return await handler(event, data)
             except Exception:
                 pass
 
@@ -75,7 +58,7 @@ class SubscriptionCheckMiddleware(BaseMiddleware):
             # keyingi urinishgacha (cooldown) qayta-qayta urinib, Telegram'ni
             # bezovta qilmaslik uchun tekshirilgan vaqtni baribir yangilaymiz.
             await db.update_subscription_check(user.id, now_tashkent_str())
-            return True
+            return await handler(event, data)
 
         if not still_subscribed:
             await db.reset_user_registration(user.id)
@@ -92,7 +75,7 @@ class SubscriptionCheckMiddleware(BaseMiddleware):
                     await bot.send_message(user.id, text, parse_mode="HTML")
             except Exception:
                 pass
-            return False  # handler() chaqirilmaydi - joriy xabar/tugma bekor qilinadi
+            return  # handler() chaqirilmaydi - joriy xabar/tugma bekor qilinadi
 
         await db.update_subscription_check(user.id, now_tashkent_str())
-        return True
+        return await handler(event, data)
