@@ -3,13 +3,12 @@ import base64
 import logging
 import os
 import tempfile
-import traceback
 from datetime import datetime, timedelta
 
 import aiohttp
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BufferedInputFile, ErrorEvent, FSInputFile
+from aiogram.types import BufferedInputFile, FSInputFile
 from aiohttp import web
 
 import config
@@ -269,36 +268,6 @@ async def main():
     subscription_middleware = SubscriptionCheckMiddleware()
     dp.message.middleware(subscription_middleware)
     dp.callback_query.middleware(subscription_middleware)
-
-    # Istalgan handler'da xato bo'lsa: foydalanuvchi jim qolmasin, Boss esa
-    # xatoning aniq sababini (qaysi fayl, qaysi qator) darhol ko'rsin.
-    @dp.errors()
-    async def on_error(event: ErrorEvent):
-        logging.exception("Handler xatosi", exc_info=event.exception)
-        upd = event.update
-        user = None
-        if upd.message:
-            user = upd.message.from_user
-        elif upd.callback_query:
-            user = upd.callback_query.from_user
-        if user:
-            try:
-                await bot.send_message(
-                    user.id,
-                    "⚠️ Texnik nosozlik yuz berdi. Iltimos, birozdan keyin qayta urinib ko'ring.",
-                )
-            except Exception:
-                pass
-        tb = "".join(traceback.format_exception(event.exception))[-3000:]
-        for boss_id in BOSS_IDS:
-            try:
-                await bot.send_message(
-                    boss_id,
-                    f"🐞 Xato (user: {user.id if user else '?'}):\n\n{tb}",
-                )
-            except Exception:
-                pass
-        return True
 
     await admin.set_admin_menu(bot)
     await admin.set_boss_menu(bot)
