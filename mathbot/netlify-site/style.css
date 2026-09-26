@@ -1,22 +1,61 @@
 :root {
-  --bg: #eaf1f8;
-  --card-bg: #ffffff;
-  --border: #d7e2ec;
-  --text: #23313f;
-  --muted: #6b7d8f;
-  --primary: #3d6ea5;
-  --primary-soft: rgba(61, 110, 165, 0.1);
-  --primary-soft-strong: rgba(61, 110, 165, 0.22);
-  --selected: #ee9248;
-  --selected-bg: #fdece0;
-  --correct: #2f7d4f;
-  --wrong: #c0392b;
+  --bg: var(--tg-theme-bg-color, #eef3f9);
+  --secondary-bg: var(--tg-theme-secondary-bg-color, #f5f8fc);
+  --card-bg: var(--tg-theme-section-bg-color, #ffffff);
+  --text: var(--tg-theme-text-color, #1c2b3a);
+  --hint: var(--tg-theme-hint-color, #7c8b9b);
+  --accent: var(--tg-theme-button-color, #3d6ea5);
+  --accent-text: var(--tg-theme-button-text-color, #ffffff);
+  --border: rgba(60, 90, 120, 0.12);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent) 26%, transparent);
   --radius-lg: 16px;
   --radius-md: 11px;
+  --correct: #2fa360;
+  --wrong: #e0503b;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Oddiy admin uchun - Boss'dan farqli o'laroq - Telegram mavzusidan qat'iy
+   nazar har doim OCH (yorug') fon. Qaysi mini app bu klassni qo'shishini
+   admin.js/aplus_admin.js hal qiladi (?role= parametriga qarab). */
+body.force-light {
+  --bg: #f4f7fb;
+  --secondary-bg: #eaf0f7;
+  --card-bg: #ffffff;
+  --text: #1c2b3a;
+  --hint: #7c8b9b;
+  --accent: #3d6ea5;
+  --accent-text: #ffffff;
+  --border: rgba(60, 90, 120, 0.14);
+}
+
+/* rating.css / results.css eski nomdagi o'zgaruvchilardan (--primary, --muted)
+   foydalanadi - ular shu faylda yo'q edi, shuning uchun Reyting va Natijalarim
+   sahifalari rangsiz chiqardi. Shu "taxallus"lar ularni yangi mavzuga ulaydi.
+   body'da e'lon qilingan - force-light rejimida ham to'g'ri rang oladi. */
+:root,
+body {
+  --primary: var(--accent);
+  --muted: var(--hint);
+  --primary-soft: var(--accent-soft);
+  --primary-soft-strong: var(--accent-soft-strong);
+  --selected: var(--accent);
+  --selected-bg: var(--accent-soft);
 }
 
 * {
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* .state-center/.question-list/.result barchasi display:flex belgilaydi,
+   xuddi shu specificity darajasida - shu sabab UA stylesheet'dagi
+   `[hidden]{display:none}` qoidasidan keyin kelib uni bekor qilib qo'yadi.
+   Natijada .hidden = true qilingan elementlar ko'rinishda qolib ketadi. */
+[hidden] {
+  display: none !important;
 }
 
 html, body {
@@ -28,51 +67,122 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: var(--bg);
   color: var(--text);
-  padding-bottom: 100px;
+  overscroll-behavior-y: none;
+  padding-bottom: calc(96px + var(--safe-bottom));
 }
 
-.progress {
+button {
+  font-family: inherit;
+}
+
+.topbar {
   position: sticky;
   top: 0;
-  z-index: 5;
-  padding: 8px 12px;
-  text-align: center;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--primary);
-  background: rgba(234, 241, 248, 0.94);
-  backdrop-filter: blur(4px);
+  z-index: 10;
+  background: var(--bg);
+  padding-top: var(--safe-top);
   border-bottom: 1px solid var(--border);
 }
 
-.header {
-  padding: 14px 16px 6px;
+.topbar-inner {
+  padding: 10px 18px 12px;
+}
+
+.topbar h1 {
+  margin: 4px 0 10px;
+  font-size: 19px;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: -0.01em;
+}
+
+.progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--secondary-bg);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.25s ease;
+}
+
+.progress-label {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--hint);
   text-align: center;
 }
 
-.header h1 {
-  font-size: 17px;
-  margin: 0 0 4px;
-  color: var(--primary);
+.late-warning {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #fdecea;
+  color: #b03a2e;
+  font-size: 13px;
+  text-align: center;
+  font-weight: 600;
 }
 
-.header p {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--muted);
+.result-hidden-note {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--card, #f2f4f7);
+  color: var(--hint);
+  font-size: 13px;
+  text-align: center;
+}
+
+#app {
+  padding: 14px 14px 4px;
+}
+
+.state-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  min-height: 60vh;
+  text-align: center;
+  padding: 24px;
+  color: var(--hint);
+  font-size: 14.5px;
+}
+
+.info-icon {
+  font-size: 34px;
+}
+
+.spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .question-list {
-  padding: 8px 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.question-row {
+.question-card {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -80,16 +190,17 @@ body {
   transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.question-row.answered {
-  background: var(--selected-bg);
-  border-color: var(--selected);
+.question-card.answered {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
 }
 
 .q-number {
-  min-width: 26px;
+  min-width: 24px;
   font-weight: 700;
-  color: var(--muted);
   font-size: 14px;
+  color: var(--hint);
+  text-align: center;
 }
 
 .options {
@@ -100,11 +211,11 @@ body {
 }
 
 .option-btn {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: 1.5px solid var(--border);
-  background: var(--card-bg);
+  background: var(--secondary-bg);
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
@@ -112,21 +223,61 @@ body {
   align-items: center;
   justify-content: center;
   padding: 0;
+  transition: transform 0.12s ease, background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.option-btn:active {
+  transform: scale(0.88);
 }
 
 .option-btn.selected {
-  background: var(--selected);
-  border-color: var(--selected);
-  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  transform: scale(1.06);
+}
+
+.submit-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 10px 14px calc(10px + var(--safe-bottom));
+  background: linear-gradient(to top, var(--bg) 60%, transparent);
+}
+
+.submit-btn {
+  width: 100%;
+  border: none;
+  border-radius: var(--radius-lg);
+  padding: 15px;
+  font-size: 15.5px;
+  font-weight: 700;
+  background: var(--accent);
+  color: var(--accent-text);
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+.submit-btn:active {
+  transform: scale(0.98);
+}
+
+.submit-btn:disabled {
+  opacity: 0.5;
+}
+
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .result-card {
-  margin: 16px;
-  padding: 24px 22px;
-  border-radius: var(--radius-lg);
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 24px 0 6px;
 }
 
 @keyframes score-pop {
@@ -143,9 +294,8 @@ body {
 .score-ring {
   width: 136px;
   height: 136px;
-  margin: 0 auto 12px;
   border-radius: 50%;
-  background: conic-gradient(var(--primary) calc(var(--pct, 0) * 1%), var(--bg) 0);
+  background: conic-gradient(var(--accent) calc(var(--pct, 0) * 1%), var(--secondary-bg) 0);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -170,30 +320,22 @@ body {
 }
 
 .score-value {
-  font-size: 30px;
+  font-size: 28px;
   font-weight: 800;
-  color: var(--text);
 }
 
 .score-total {
-  font-size: 13px;
-  color: var(--muted);
+  font-size: 12px;
+  color: var(--hint);
 }
 
-.result-card p {
-  margin: 0 0 6px;
-  color: var(--muted);
+.result-caption {
+  margin: 0;
   font-size: 13px;
-}
-
-.result-score {
-  font-size: 38px;
-  font-weight: 800;
-  color: var(--primary);
+  color: var(--hint);
 }
 
 .result-list {
-  padding: 4px 12px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -205,8 +347,8 @@ body {
   align-items: center;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: 12px;
+  padding: 10px 12px;
   font-size: 12.5px;
   gap: 8px;
 }
@@ -219,164 +361,336 @@ body {
   border-left: 4px solid var(--wrong);
 }
 
+.result-status {
+  font-weight: 700;
+}
+
 .result-status.correct {
   color: var(--correct);
-  font-weight: 700;
 }
 
 .result-status.wrong {
   color: var(--wrong);
+}
+
+.aplus-question-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aplus-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.aplus-row.answered {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft-strong);
+}
+
+.aplus-badge {
+  min-width: 34px;
+  padding: 6px 0;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.aplus-input {
+  flex: 1;
+  min-width: 0;
+  height: 44px;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 1.2;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--secondary-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-all;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.aplus-input:empty::before {
+  content: attr(data-placeholder);
+  color: var(--hint);
+}
+
+.aplus-input.aplus-input-focused {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.aplus-kbd-btn {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.12s ease, background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.aplus-kbd-btn:active {
+  transform: scale(0.9);
+}
+
+.aplus-kbd-btn.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.math-keyboard {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: var(--card-bg);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.15);
+  padding: 8px 10px calc(10px + var(--safe-bottom));
+}
+
+.math-keyboard-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.math-keyboard-tab {
+  flex: 1;
+  padding: 7px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--hint);
+  font-size: 12px;
   font-weight: 700;
 }
 
+.math-keyboard-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.math-keyboard-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+}
+
+.math-keyboard-key {
+  padding: 10px 0;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.math-keyboard-key.wide {
+  grid-column: span 2;
+}
+
+.math-keyboard-key.danger {
+  color: var(--wrong);
+}
+
+.math-keyboard-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.math-keyboard-done {
+  padding: 8px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* ---------- Sarlavha, "Test ma'lumotlari" formasi (nom/vaqt/sozlamalar) ----------
+   Bu bo'lim avvalgi tahrirlardan birida faylga tushib qolmagan edi - shu
+   sabab "Test ma'lumotlari" ekrani butunlay uslubsiz (brauzer standart
+   ko'rinishida) chiqib qolgan edi. */
+
+.progress {
+  padding: 10px 16px 0;
+  font-size: 13px;
+  color: var(--hint);
+  text-align: center;
+}
+
+.header {
+  padding: 18px 16px 6px;
+  text-align: center;
+}
+
+.header h1 {
+  margin: 0 0 8px;
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+.header p {
+  margin: 0 auto;
+  max-width: 320px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--hint);
+}
+
+.question-count-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.count-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--card-bg);
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+.count-btn:active {
+  transform: scale(0.9);
+}
+
+.count-btn:disabled {
+  opacity: 0.4;
+}
+
 .time-field {
-  margin: 0 16px 14px;
-  padding: 14px;
+  margin: 0 16px 12px;
+  padding: 14px 16px;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-lg);
 }
 
-.time-field label {
+.time-field label,
+.time-field .settings-label {
   display: block;
-  font-size: 12.5px;
-  color: var(--muted);
-  margin-bottom: 6px;
-}
-
-.time-field input,
-.time-field textarea {
-  width: 100%;
-  padding: 10px;
-  font-size: 14px;
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
+  margin-bottom: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
   color: var(--text);
-  background: var(--bg);
+}
+
+.time-field input[type="text"],
+.time-field input[type="date"],
+.time-field select {
+  box-sizing: border-box;
+  height: 42px;
+  padding: 0 12px;
+  font-size: 14px;
   font-family: inherit;
+  color: var(--text);
+  background: var(--secondary-bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s ease;
 }
 
-.time-field textarea {
-  resize: vertical;
-  min-height: 90px;
+.time-field input[type="text"]:focus,
+.time-field input[type="date"]:focus,
+.time-field select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
-.datetime-row,
-.time-picker {
+.time-field input[type="text"] {
+  width: 100%;
+}
+
+.time-field input[type="text"]::placeholder {
+  color: var(--hint);
+}
+
+.datetime-row {
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-.datetime-row select,
-.time-picker select {
+.datetime-row input[type="date"] {
   flex: 1;
   min-width: 0;
-  padding: 10px 4px;
-  font-size: 14px;
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  background: var(--bg);
-  text-align: center;
 }
 
-.datetime-row input[type="date"] {
-  flex: 2;
-  padding: 10px;
-  font-size: 14px;
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  background: var(--bg);
+.datetime-row select {
+  width: 64px;
+  text-align: center;
 }
 
 .time-sep {
   font-weight: 700;
-  color: var(--muted);
+  color: var(--hint);
 }
 
 .settings-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 12px;
 }
 
 .settings-row .settings-label {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.settings-status {
-  margin: 4px 16px 20px;
-  padding: 12px 14px;
-  border-radius: 10px;
-  background: var(--selected-bg);
-  border: 1px solid var(--selected);
-  color: var(--text);
-  font-size: 13px;
-  text-align: center;
-  font-weight: 600;
-}
-
-.settings-divider {
-  margin: 24px 16px;
-  border: none;
-  border-top: 1px solid var(--border, #d9e2ec);
-}
-
-.save-btn {
-  display: block;
-  width: calc(100% - 32px);
-  margin: 20px 16px 24px;
-  padding: 14px;
-  border: none;
-  border-radius: 12px;
-  background: var(--accent, #3d6ea5);
-  color: #fff;
-  font-size: 15px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.save-btn:active {
-  opacity: 0.85;
-}
-
-.save-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.day-picker {
-  display: flex;
-  gap: 6px;
-}
-
-.day-btn {
+  margin-bottom: 0;
   flex: 1;
-  min-width: 0;
-  padding: 10px 2px;
-  border-radius: 10px;
-  border: 1.5px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 700;
-  text-align: center;
-}
-
-.day-btn.selected {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
 }
 
 .switch {
   position: relative;
   display: inline-block;
-  width: 46px;
+  width: 44px;
   height: 26px;
   flex-shrink: 0;
 }
@@ -398,26 +712,134 @@ body {
 .switch-slider::before {
   content: "";
   position: absolute;
-  height: 20px;
-  width: 20px;
   left: 3px;
   top: 3px;
-  background: #fff;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
   transition: transform 0.15s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .switch input:checked + .switch-slider {
-  background: var(--primary);
+  background: var(--accent);
 }
 
 .switch input:checked + .switch-slider::before {
-  transform: translateX(20px);
+  transform: translateX(18px);
+}
+
+.result-score {
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* ---------- Bo'sh holat (Reyting / Natijalarim) ---------- */
+
+.empty-state {
+  margin: 60px 24px;
+  text-align: center;
+  color: var(--hint);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---------- Sozlamalar sahifasi (settings.html) ----------
+   Bu uslublar avvalgi tahrirda boshqa style.css'ga ko'chib ketib qolgan edi. */
+
+.time-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-picker select {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 4px;
+  font-size: 14px;
+  font-family: inherit;
+  text-align: center;
+  color: var(--text);
+  background: var(--secondary-bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.settings-status {
+  margin: 4px 16px 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-strong);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.settings-divider {
+  margin: 24px 16px;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.save-btn {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 20px 16px 24px;
+  padding: 15px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+.save-btn:active {
+  transform: scale(0.98);
+}
+
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.day-picker {
+  display: flex;
+  gap: 6px;
+}
+
+.day-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 2px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.day-btn.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
 }
 
 .schedule-item {
-  border-left: 4px solid var(--primary);
+  border-left: 4px solid var(--accent);
 }
 
 .schedule-item-time {
@@ -443,206 +865,4 @@ body {
   padding: 4px;
   line-height: 1;
   cursor: pointer;
-}
-
-.question-count-bar {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-  margin: 4px 16px 18px;
-  padding: 10px 14px;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
-
-.question-count-bar span {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--text);
-  min-width: 80px;
-  text-align: center;
-}
-
-.count-btn {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: none;
-  background: var(--primary);
-  color: #fff;
-  font-size: 18px;
-  font-weight: 700;
-  line-height: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.count-btn:disabled {
-  background: var(--border);
-  color: var(--muted);
-}
-
-.aplus-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--card-bg);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 8px 10px;
-}
-
-.aplus-row.answered {
-  border-color: var(--selected);
-  background: var(--selected-bg);
-}
-
-.aplus-badge {
-  min-width: 34px;
-  padding: 6px 0;
-  border-radius: 8px;
-  background: var(--primary);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 800;
-  text-align: center;
-  flex-shrink: 0;
-}
-
-.aplus-input {
-  flex: 1;
-  min-width: 0;
-  height: 44px;
-  box-sizing: border-box;
-  padding: 8px 10px;
-  font-size: 14px;
-  line-height: 1.2;
-  border: 1.5px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  background: var(--bg);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  white-space: pre-wrap;
-  word-break: break-all;
-  user-select: none;
-  -webkit-user-select: none;
-}
-
-.aplus-input:empty::before {
-  content: attr(data-placeholder);
-  color: var(--hint);
-}
-
-.aplus-input.aplus-input-focused {
-  border-color: var(--accent, #3d6ea5);
-}
-
-.aplus-kbd-btn {
-  flex-shrink: 0;
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  border: 1.5px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-}
-
-.aplus-kbd-btn.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
-}
-
-.math-keyboard {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 20;
-  background: var(--card-bg);
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12);
-  padding: 8px 10px calc(10px + env(safe-area-inset-bottom));
-}
-
-.math-keyboard-tabs {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 8px;
-}
-
-.math-keyboard-tab {
-  flex: 1;
-  padding: 7px 0;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--muted);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.math-keyboard-tab.active {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
-}
-
-.math-keyboard-grid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
-}
-
-.math-keyboard-key {
-  padding: 10px 0;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.math-keyboard-key.wide {
-  grid-column: span 2;
-}
-
-.math-keyboard-key.danger {
-  color: var(--wrong);
-}
-
-.math-keyboard-footer {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 8px;
-}
-
-.math-keyboard-done {
-  padding: 8px 18px;
-  border-radius: 8px;
-  border: none;
-  background: var(--primary);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.empty-state {
-  margin: 60px 24px;
-  text-align: center;
-  color: var(--muted);
-  font-size: 14px;
 }
