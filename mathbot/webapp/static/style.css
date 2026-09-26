@@ -31,6 +31,20 @@ body.force-light {
   --border: rgba(60, 90, 120, 0.14);
 }
 
+/* rating.css / results.css eski nomdagi o'zgaruvchilardan (--primary, --muted)
+   foydalanadi - ular shu faylda yo'q edi, shuning uchun Reyting va Natijalarim
+   sahifalari rangsiz chiqardi. Shu "taxallus"lar ularni yangi mavzuga ulaydi.
+   body'da e'lon qilingan - force-light rejimida ham to'g'ri rang oladi. */
+:root,
+body {
+  --primary: var(--accent);
+  --muted: var(--hint);
+  --primary-soft: var(--accent-soft);
+  --primary-soft-strong: var(--accent-soft-strong);
+  --selected: var(--accent);
+  --selected-bg: var(--accent-soft);
+}
+
 * {
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
@@ -720,4 +734,135 @@ button {
   font-size: 22px;
   font-weight: 800;
   letter-spacing: 0.02em;
+}
+
+/* ---------- Bo'sh holat (Reyting / Natijalarim) ---------- */
+
+.empty-state {
+  margin: 60px 24px;
+  text-align: center;
+  color: var(--hint);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* ---------- Sozlamalar sahifasi (settings.html) ----------
+   Bu uslublar avvalgi tahrirda boshqa style.css'ga ko'chib ketib qolgan edi. */
+
+.time-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-picker select {
+  flex: 1;
+  min-width: 0;
+  height: 42px;
+  padding: 0 4px;
+  font-size: 14px;
+  font-family: inherit;
+  text-align: center;
+  color: var(--text);
+  background: var(--secondary-bg);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.settings-status {
+  margin: 4px 16px 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-soft-strong);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.settings-divider {
+  margin: 24px 16px;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
+.save-btn {
+  display: block;
+  width: calc(100% - 32px);
+  margin: 20px 16px 24px;
+  padding: 15px;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: var(--accent);
+  color: var(--accent-text);
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s ease, opacity 0.15s ease;
+}
+
+.save-btn:active {
+  transform: scale(0.98);
+}
+
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.day-picker {
+  display: flex;
+  gap: 6px;
+}
+
+.day-btn {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 2px;
+  border-radius: var(--radius-md);
+  border: 1.5px solid var(--border);
+  background: var(--secondary-bg);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.day-btn.selected {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.schedule-item {
+  border-left: 4px solid var(--accent);
+}
+
+.schedule-item-time {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.schedule-item.disabled {
+  opacity: 0.55;
+  border-left-color: var(--border);
+}
+
+.schedule-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.schedule-del-btn {
+  border: none;
+  background: none;
+  font-size: 16px;
+  padding: 4px;
+  line-height: 1;
+  cursor: pointer;
 }
