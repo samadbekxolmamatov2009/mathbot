@@ -252,6 +252,7 @@ async function submitTest() {
           type: editId ? "aplus_test_updated" : "aplus_test_created",
           code: data.code,
           name: testNameEl.value.trim(),
+          regrade: data.regrade || null,
         })
       );
     }, 800);
