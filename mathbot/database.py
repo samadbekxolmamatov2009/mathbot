@@ -834,6 +834,26 @@ async def save_test_submission(test_id: int, telegram_id: int, answers: dict, sc
         await db.commit()
 
 
+async def get_test_submissions_for_regrade(test_id: int):
+    """Testni qayta baholash uchun: shu testni ishlagan barcha o'quvchilarning javoblari."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, telegram_id, answers, score, submitted_at FROM test_submissions WHERE test_id = ?",
+            (test_id,),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def update_test_submission_scores(updates: list):
+    """updates: [(yangi_ball, submission_id), ...]"""
+    if not updates:
+        return
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.executemany("UPDATE test_submissions SET score = ? WHERE id = ?", updates)
+        await db.commit()
+
+
 # ---------- A+ testlar (yozma javobli, Mini App) ----------
 
 async def aplus_code_exists(code: str) -> bool:
@@ -988,6 +1008,26 @@ async def save_aplus_submission(test_id: int, telegram_id: int, answers: dict, s
                ON CONFLICT(test_id, telegram_id) DO NOTHING""",
             (test_id, telegram_id, json.dumps(answers), score, now_tashkent_sql_str()),
         )
+        await db.commit()
+
+
+async def get_aplus_submissions_for_regrade(test_id: int):
+    """A+ testni qayta baholash uchun: shu testni ishlagan barcha o'quvchilarning javoblari."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT id, telegram_id, answers, score, submitted_at FROM aplus_submissions WHERE test_id = ?",
+            (test_id,),
+        ) as cursor:
+            return await cursor.fetchall()
+
+
+async def update_aplus_submission_scores(updates: list):
+    """updates: [(yangi_ball, submission_id), ...]"""
+    if not updates:
+        return
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.executemany("UPDATE aplus_submissions SET score = ? WHERE id = ?", updates)
         await db.commit()
 
 
