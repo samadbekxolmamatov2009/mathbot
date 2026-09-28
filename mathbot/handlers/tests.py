@@ -34,6 +34,18 @@ def _role_param(user_id: int) -> str:
 
 # ---------- Admin: javoblarni Mini App orqali kiritish ----------
 
+
+def _regrade_line(payload: dict) -> str:
+    """Test tahrirlanganda: nechta o'quvchining natijasi qayta hisoblanganini ko'rsatadi."""
+    regrade = payload.get("regrade") or {}
+    total = regrade.get("total") or 0
+    if not total:
+        return ""
+    return (
+        f"🔄 Ishlagan {total} ta o'quvchining natijasi yangi javoblar bo'yicha qayta "
+        f"hisoblandi ({regrade.get('changed', 0)} tasining bali o'zgardi).\n\n"
+    )
+
 @router.message(F.text == "📝 Javoblarni yozish")
 async def open_admin_test_app(message: Message):
     if not is_admin(message.from_user.id):
@@ -76,6 +88,7 @@ async def handle_web_app_data(message: Message):
         await message.answer(
             f"✅ <b>Test muvaffaqiyatli {action}!</b>\n\n"
             f"{name_line}"
+            f"{_regrade_line(payload)}"
             "O'quvchilar \"📝 Test yuborish\" tugmasi orqali mavzuni ro'yxatdan tanlab ishlay oladi.",
             parse_mode="HTML",
             reply_markup=admin_menu_keyboard(),
@@ -88,6 +101,7 @@ async def handle_web_app_data(message: Message):
         await message.answer(
             f"✅ <b>A+ test muvaffaqiyatli {action}!</b>\n\n"
             f"{name_line}"
+            f"{_regrade_line(payload)}"
             "O'quvchilar \"➕ A+ ishlash\" tugmasi orqali mavzuni ro'yxatdan tanlab ishlay oladi.",
             parse_mode="HTML",
             reply_markup=admin_menu_keyboard(),
