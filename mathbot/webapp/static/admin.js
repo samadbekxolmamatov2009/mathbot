@@ -260,6 +260,7 @@ async function submitTest() {
           type: editId ? "test_updated" : "test_created",
           code: data.code,
           name: testNameEl.value.trim(),
+          regrade: data.regrade || null,
         })
       );
     }, 800);
