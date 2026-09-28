@@ -253,7 +253,8 @@ async def update_test_handler(request: web.Request):
         log.error("Test yangilandi deb hisoblandi, lekin baza mos kelmadi! id=%s", test_id)
         return web.json_response({"error": "save_failed"}, status=500)
 
-    return web.json_response({"code": test["code"]})
+    regrade = await regrade_test(test_id)
+    return web.json_response({"code": test["code"], "regrade": regrade})
 
 
 def _show_wrong_answers(test) -> bool:
@@ -309,6 +310,70 @@ async def test_status_handler(request: web.Request):
 LATE_SUBMISSION_SCORE_RATIO = 0.75
 
 
+def _test_raw_score(correct_answers: dict, user_answers: dict, total_questions: int) -> int:
+    return sum(
+        1
+        for q in range(1, total_questions + 1)
+        if user_answers.get(str(q)) == correct_answers.get(str(q))
+    )
+
+
+def _aplus_raw_score(correct_answers: dict, user_answers: dict, question_count: int) -> int:
+    return sum(
+        1
+        for key in _aplus_field_keys(question_count)
+        if answers_equivalent(correct_answers.get(key), user_answers.get(key))
+    )
+
+
+def _was_late(submitted_at, end_time) -> bool:
+    """Topshirilgan vaqt (\"YYYY-MM-DD HH:MM:SS\") tugash vaqtidan (\"YYYY-MM-DDTHH:MM\") keyinmi."""
+    if not submitted_at or not end_time:
+        return False
+    return str(submitted_at)[:16].replace(" ", "T") > end_time
+
+
+async def regrade_test(test_id: int) -> dict:
+    """Admin test javoblarini o'zgartirganda: shu testni ishlagan HAR BIR o'quvchining
+    balini yangi javoblar kaliti bo'yicha qayta hisoblaydi. Kech topshirganlar uchun
+    75% qoidasi saqlanadi. Tangalar va reyting ballardan hisoblangani uchun ular ham
+    avtomatik yangilanadi; "qaysi misol to'g'ri/xato" esa doim joriy kalitdan chiqadi."""
+    test = await db.get_test_by_id(test_id)
+    if not test:
+        return {"total": 0, "changed": 0}
+    correct = json.loads(test["answers"])
+    total_questions = test["total_questions"] or DEFAULT_TOTAL_QUESTIONS
+    subs = await db.get_test_submissions_for_regrade(test_id)
+    updates = []
+    for sub in subs:
+        raw = _test_raw_score(correct, json.loads(sub["answers"]), total_questions)
+        new_score = round(raw * LATE_SUBMISSION_SCORE_RATIO) if _was_late(sub["submitted_at"], test["end_time"]) else raw
+        if new_score != sub["score"]:
+            updates.append((new_score, sub["id"]))
+    await db.update_test_submission_scores(updates)
+    log.info("Test %s qayta baholandi: %s ta natija, %s tasi o'zgardi", test_id, len(subs), len(updates))
+    return {"total": len(subs), "changed": len(updates)}
+
+
+async def regrade_aplus_test(test_id: int) -> dict:
+    """A+ test uchun xuddi shunday qayta baholash."""
+    test = await db.get_aplus_test_by_id(test_id)
+    if not test:
+        return {"total": 0, "changed": 0}
+    correct = json.loads(test["answers"])
+    question_count = test["question_count"]
+    subs = await db.get_aplus_submissions_for_regrade(test_id)
+    updates = []
+    for sub in subs:
+        raw = _aplus_raw_score(correct, json.loads(sub["answers"]), question_count)
+        new_score = round(raw * LATE_SUBMISSION_SCORE_RATIO) if _was_late(sub["submitted_at"], test["end_time"]) else raw
+        if new_score != sub["score"]:
+            updates.append((new_score, sub["id"]))
+    await db.update_aplus_submission_scores(updates)
+    log.info("A+ test %s qayta baholandi: %s ta natija, %s tasi o'zgardi", test_id, len(subs), len(updates))
+    return {"total": len(subs), "changed": len(updates)}
+
+
 async def submit_test_handler(request: web.Request):
     code = request.match_info["code"]
     test = await db.get_test_by_code(code)
@@ -353,11 +418,7 @@ async def submit_test_handler(request: web.Request):
     if not isinstance(submitted_answers, dict):
         submitted_answers = {}
 
-    raw_score = sum(
-        1
-        for q in range(1, total_questions + 1)
-        if submitted_answers.get(str(q)) == correct_answers.get(str(q))
-    )
+    raw_score = _test_raw_score(correct_answers, submitted_answers, total_questions)
     score = round(raw_score * LATE_SUBMISSION_SCORE_RATIO) if is_late else raw_score
 
     await db.save_test_submission(test["id"], user["id"], submitted_answers, score)
@@ -809,7 +870,8 @@ async def aplus_update_test_handler(request: web.Request):
         bool(body.get("show_wrong_answers", True)),
     )
 
-    return web.json_response({"code": test["code"]})
+    regrade = await regrade_aplus_test(test_id)
+    return web.json_response({"code": test["code"], "regrade": regrade})
 
 
 async def aplus_test_status_handler(request: web.Request):
@@ -902,11 +964,7 @@ async def aplus_submit_handler(request: web.Request):
     if not isinstance(submitted_answers, dict):
         submitted_answers = {}
 
-    raw_score = sum(
-        1
-        for key in _aplus_field_keys(question_count)
-        if answers_equivalent(correct_answers.get(key), submitted_answers.get(key))
-    )
+    raw_score = _aplus_raw_score(correct_answers, submitted_answers, question_count)
     score = round(raw_score * LATE_SUBMISSION_SCORE_RATIO) if is_late else raw_score
 
     await db.save_aplus_submission(test["id"], user["id"], submitted_answers, score)
