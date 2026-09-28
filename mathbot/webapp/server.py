@@ -497,6 +497,8 @@ async def my_results_handler(request: web.Request):
                 "attendance_coins": coins["attendance_coins"],
                 "test_coins": coins["test_coins"],
                 "test_streak_coins": coins["test_streak_coins"],
+                "aplus_coins": coins["aplus_coins"],
+                "aplus_streak_coins": coins["aplus_streak_coins"],
                 "total": coins["total"],
             },
         }
