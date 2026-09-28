@@ -253,7 +253,12 @@ async def update_test_handler(request: web.Request):
         log.error("Test yangilandi deb hisoblandi, lekin baza mos kelmadi! id=%s", test_id)
         return web.json_response({"error": "save_failed"}, status=500)
 
-    regrade = await regrade_test(test_id)
+    # Qayta baholashda xato bo'lsa ham, testning o'zi saqlangan - admin xato ko'rmasin.
+    try:
+        regrade = await regrade_test(test_id)
+    except Exception:
+        log.exception("Qayta baholashda xato (test %s)", test_id)
+        regrade = None
     return web.json_response({"code": test["code"], "regrade": regrade})
 
 
@@ -870,7 +875,12 @@ async def aplus_update_test_handler(request: web.Request):
         bool(body.get("show_wrong_answers", True)),
     )
 
-    regrade = await regrade_aplus_test(test_id)
+    # Qayta baholashda xato bo'lsa ham, testning o'zi saqlangan - admin xato ko'rmasin.
+    try:
+        regrade = await regrade_aplus_test(test_id)
+    except Exception:
+        log.exception("Qayta baholashda xato (test %s)", test_id)
+        regrade = None
     return web.json_response({"code": test["code"], "regrade": regrade})
 
 
