@@ -850,7 +850,9 @@ async def update_test_submission_scores(updates: list):
     if not updates:
         return
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.executemany("UPDATE test_submissions SET score = ? WHERE id = ?", updates)
+        # executemany ishlatilmaydi: Turso ulanishida bu metod yo'q.
+        for new_score, submission_id in updates:
+            await db.execute("UPDATE test_submissions SET score = ? WHERE id = ?", (new_score, submission_id))
         await db.commit()
 
 
@@ -1027,7 +1029,9 @@ async def update_aplus_submission_scores(updates: list):
     if not updates:
         return
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.executemany("UPDATE aplus_submissions SET score = ? WHERE id = ?", updates)
+        # executemany ishlatilmaydi: Turso ulanishida bu metod yo'q.
+        for new_score, submission_id in updates:
+            await db.execute("UPDATE aplus_submissions SET score = ? WHERE id = ?", (new_score, submission_id))
         await db.commit()
 
 
