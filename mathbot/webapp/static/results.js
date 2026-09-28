@@ -28,6 +28,7 @@ const aplusEmptyEl = document.getElementById("aplusEmpty");
 
 const streakSectionEl = document.getElementById("streakSection");
 const streakValueEl = document.getElementById("streakValue");
+const aplusStreakValueEl = document.getElementById("aplusStreakValue");
 
 const attendanceSectionEl = document.getElementById("attendanceSection");
 const attendanceCountEl = document.getElementById("attendanceCount");
@@ -157,6 +158,7 @@ async function init() {
     }
 
     streakValueEl.textContent = String(coins.test_streak_coins);
+    if (aplusStreakValueEl) aplusStreakValueEl.textContent = String(coins.aplus_streak_coins || 0);
     streakSectionEl.hidden = false;
 
     attendanceCountEl.textContent = `${coins.attendance_count} marta ishtirok`;
