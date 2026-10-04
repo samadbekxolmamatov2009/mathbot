@@ -85,8 +85,8 @@ def generate_period_report(
     rows,
     since: datetime,
     until: datetime = None,
-    group: str = "Turbo 4.0 Muhokama",
-    course: str = "Turbo 4.0 MS",
+    group: str = "Turbo 5.0 Muhokama",
+    course: str = "Turbo 5.0 MS",
 ) -> str:
     """Berilgan davr ichida (since - until) topshirilgan test/A+ natijalari
     asosida haqiqiy "Haftalik hisobot" PDF yaratadi.
@@ -209,8 +209,8 @@ def generate_period_report(
 
 def generate_weekly_report(
     output_path: str,
-    group: str = "Turbo 4.0 Muhokama",
-    course: str = "Turbo 4.0 MS",
+    group: str = "Turbo 5.0 Muhokama",
+    course: str = "Turbo 5.0 MS",
     generated_at: datetime = None,
 ) -> str:
     """ESKI (namuna ma'lumotli) hisobot - endi ishlatilmaydi, faqat orqaga
