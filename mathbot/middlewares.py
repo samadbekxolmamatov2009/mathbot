@@ -22,6 +22,16 @@ from config import ADMIN_IDS, BOSS_IDS, COURSES, DEFAULT_ADMIN_CONTACT_URL, SUBS
 from timezone_utils import now_tashkent, now_tashkent_str
 
 
+async def get_course_channel(course_key: str | None) -> str | None:
+    """Kurs uchun obuna tekshiriladigan kanal.
+    Avval bazadagi qiymat (Boss guruh ichida /obuna_shu_yerga yozganda saqlanadi),
+    bo'lmasa config.py dagi COURSES[...]["channel"]."""
+    if not course_key:
+        return None
+    saved = await db.get_setting(f"subscription_channel_{course_key}")
+    return saved or COURSES.get(course_key, {}).get("channel")
+
+
 class SubscriptionCheckMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
         user = getattr(event, "from_user", None)
@@ -33,7 +43,7 @@ class SubscriptionCheckMiddleware(BaseMiddleware):
             return await handler(event, data)
 
         course_key = db_user["course"]
-        channel = COURSES.get(course_key, {}).get("channel") if course_key else None
+        channel = await get_course_channel(course_key)
         if not channel:
             return await handler(event, data)
 
