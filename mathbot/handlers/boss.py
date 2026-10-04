@@ -1,4 +1,5 @@
 from aiogram import Router, F
+from aiogram.filters import or_f
 from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
@@ -9,7 +10,8 @@ from states import Boss
 from keyboards import NAV_BUTTON_TEXTS
 
 router = Router()
-router.message.filter(F.chat.type == "private")
+# Shaxsiy chat + guruh ichida yoziladigan yagona buyruq: /hisobot_shu_yerga
+router.message.filter(or_f(F.chat.type == "private", Command("hisobot_shu_yerga")))
 router.callback_query.filter(F.message.chat.type == "private")
 
 # Bu buyruq/tugmalar hech qayerda ADMIN_MENU_TEXTS/Bot Menu orqali boshqa
@@ -341,6 +343,15 @@ async def boss_report_channel_save(message: Message, state: FSMContext):
         return
 
     value = message.text.strip()
+    if "t.me/+" in value or "t.me/joinchat" in value:
+        await message.answer(
+            "Taklif havolasi (t.me/+...) orqali bot kanalni topa olmaydi.\n\n"
+            "Buning o'rniga: botni o'sha guruh/kanalga <b>admin</b> qilib qo'shing va "
+            "o'sha guruhning o'zida <code>/hisobot_shu_yerga</code> buyrug'ini yuboring - "
+            "bot guruh ID'sini o'zi aniqlab, saqlaydi.",
+            parse_mode="HTML",
+        )
+        return
     if not (value.startswith("@") or value.startswith("-") or value.lstrip("-").isdigit()):
         await message.answer(
             "Kanal username'i @ bilan boshlanishi yoki kanal ID (masalan -1001234567890) "
@@ -351,6 +362,36 @@ async def boss_report_channel_save(message: Message, state: FSMContext):
     await state.clear()
     await db.set_setting("report_channel_id", value)
     await message.answer(f"✅ Kanal yangilandi:\n<code>{value}</code>", parse_mode="HTML")
+
+
+# ---------- Hisobot kanalini guruhning O'ZIDAN belgilash ----------
+# Yopiq guruh/kanalning (t.me/+... havolali) @username'i bo'lmaydi. Boss o'sha
+# guruhning ichida /hisobot_shu_yerga deb yozadi - bot chat ID'sini o'zi saqlaydi.
+
+async def _save_report_chat(message: Message):
+    chat_id = str(message.chat.id)
+    await db.set_setting("report_channel_id", chat_id)
+    try:
+        await message.answer(
+            "✅ Haftalik hisobot va rejalashtirilgan xabarlar endi <b>shu guruhga</b> yuboriladi.\n"
+            f"Guruh ID: <code>{chat_id}</code>",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
+
+
+@router.message(Command("hisobot_shu_yerga"), F.chat.type.in_({"group", "supergroup"}))
+async def boss_report_here_group(message: Message):
+    if not message.from_user or not is_boss(message.from_user.id):
+        return
+    await _save_report_chat(message)
+
+
+@router.channel_post(Command("hisobot_shu_yerga"))
+async def boss_report_here_channel(message: Message):
+    # Kanalga faqat uning adminlari post yoza oladi.
+    await _save_report_chat(message)
 
 
 @router.message(Command("boss_score"))
