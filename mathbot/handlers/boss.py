@@ -443,6 +443,8 @@ async def _set_subscription_chat_silent(bot, chat, boss_id: int):
     chat_id = str(chat.id)
     for course_key in COURSES:
         await db.set_setting(f"subscription_channel_{course_key}", chat_id)
+    # Haftalik hisobot ham shu guruhga yuborilsin
+    await db.set_setting("report_channel_id", chat_id)
     names = ", ".join(c["name"] for c in COURSES.values())
     try:
         member = await bot.get_chat_member(chat.id, boss_id)
@@ -453,7 +455,8 @@ async def _set_subscription_chat_silent(bot, chat, boss_id: int):
         await bot.send_message(
             boss_id,
             f"🔒 <b>{names}</b> kursiga endi faqat <b>{chat.title or chat_id}</b> a'zolari "
-            f"ro'yxatdan o'ta oladi.\nGuruh ID: <code>{chat_id}</code>\n\n{check}",
+            f"ro'yxatdan o'ta oladi.\n📊 Haftalik hisobot ham shu guruhga yuboriladi.\n"
+            f"Guruh ID: <code>{chat_id}</code>\n\n{check}",
             parse_mode="HTML",
         )
     except Exception:
@@ -476,6 +479,53 @@ async def boss_forward_from_channel(message: Message):
     if not is_boss(message.from_user.id):
         return
     await _set_subscription_chat_silent(message.bot, message.forward_origin.chat, message.from_user.id)
+
+
+# ---------- Haftalik hisobotni tekshirish: /hisobot_test ----------
+# Boss shaxsiy chatda /hisobot_test yozadi - bot hisobot qayerga ketishini,
+# jadval (kun/vaqt) bor-yo'qligini ko'rsatadi va hisobotni HOZIROQ yuborib ko'radi.
+# Xato bo'lsa, xato matnini Boss'ga yozadi.
+
+@router.message(Command("hisobot_test"), F.chat.type == "private")
+async def boss_report_test(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    import os
+    import tempfile
+    from datetime import datetime, timedelta
+    from aiogram.types import FSInputFile
+    from pdf_report import generate_period_report
+    from timezone_utils import now_tashkent
+
+    WEEKDAYS = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
+    channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
+    schedules = await db.get_report_schedules()
+    active = [s for s in schedules if s["enabled"]]
+    sched_text = "\n".join(
+        f"• {WEEKDAYS[s['day_of_week']]} {s['time_of_day']}" for s in active
+    ) or "❌ Yoqilgan jadval YO'Q - hisobot hech qachon avtomatik yuborilmaydi! (⚙️ Sozlamalar orqali kun/vaqt qo'shing)"
+    last_sent = await db.get_report_last_sent_at() or "hali yuborilmagan"
+
+    lines = [
+        "📊 <b>Haftalik hisobot holati</b>",
+        f"Kanal/guruh: <code>{channel}</code>",
+        f"Oxirgi yuborilgan: {last_sent}",
+        f"Jadval:\n{sched_text}",
+        "",
+    ]
+    try:
+        now = now_tashkent()
+        since_dt = now - timedelta(days=7)
+        rows = await db.get_submissions_since(since_dt.strftime("%Y-%m-%dT%H:%M:%S"))
+        path = os.path.join(tempfile.gettempdir(), "hisobot_test.pdf")
+        generate_period_report(path, rows, since_dt, now)
+        await message.bot.send_document(channel, FSInputFile(path), caption="🧪 Sinov hisoboti (oxirgi 7 kun)")
+        lines.append("✅ Sinov hisoboti kanalga muvaffaqiyatli yuborildi.")
+    except Exception as e:
+        import html as _h
+        lines.append(f"❌ Kanalga yuborib bo'lmadi:\n<code>{_h.escape(str(e))}</code>")
+        lines.append("\nKo'pincha sabab: bot o'sha guruh/kanalda admin emas yoki kanal noto'g'ri.")
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("boss_score"))
