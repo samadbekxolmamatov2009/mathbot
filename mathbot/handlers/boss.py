@@ -343,12 +343,12 @@ async def boss_report_channel_save(message: Message, state: FSMContext):
         return
 
     value = message.text.strip()
-    if "t.me/+" in value or "t.me/joinchat" in value:
+    if "t.me/+" in value or "t.me/joinchat" in value or value.startswith("@+"):
         await message.answer(
             "Taklif havolasi (t.me/+...) orqali bot kanalni topa olmaydi.\n\n"
-            "Buning o'rniga: botni o'sha guruh/kanalga <b>admin</b> qilib qo'shing va "
-            "o'sha guruhning o'zida <code>/hisobot_shu_yerga</code> buyrug'ini yuboring - "
-            "bot guruh ID'sini o'zi aniqlab, saqlaydi.",
+            "Buning o'rniga: botni o'sha guruhga <b>admin</b> qilib qo'shing va shu yerda "
+            "<code>/guruhlar</code> buyrug'ini yuboring - bot ko'rgan guruhlar ro'yxatidan "
+            "keraklisini tanlaysiz.",
             parse_mode="HTML",
         )
         return
@@ -527,6 +527,92 @@ async def boss_report_test(message: Message):
         lines.append(f"❌ Kanalga yuborib bo'lmadi:\n<code>{_h.escape(str(e))}</code>")
         lines.append("\nKo'pincha sabab: bot o'sha guruh/kanalda admin emas yoki kanal noto'g'ri.")
     await message.answer("\n".join(lines), parse_mode="HTML")
+
+
+# ---------- Bot ko'rgan guruhlar ro'yxati: /guruhlar ----------
+# Bot admin bo'lgan guruhdagi HAR QANDAY xabarni ko'radi. Shu xabarlardan
+# guruh ID'si va nomi jimgina eslab qolinadi (guruhga hech narsa yozilmaydi).
+# Boss shaxsiy chatda /guruhlar yozadi va ro'yxatdan keraklisini bosadi -
+# obuna tekshiruvi ham, haftalik hisobot ham shu guruhga o'tadi.
+
+import json as _json
+
+
+async def _remember_chat(chat):
+    if chat.type not in ("group", "supergroup", "channel"):
+        return
+    try:
+        seen = _json.loads(await db.get_setting("seen_chats") or "{}")
+    except ValueError:
+        seen = {}
+    key = str(chat.id)
+    title = chat.title or key
+    if seen.get(key) == title:
+        return
+    seen[key] = title
+    await db.set_setting("seen_chats", _json.dumps(seen, ensure_ascii=False))
+
+
+@router.message.outer_middleware()
+async def _seen_chats_middleware(handler, event, data):
+    try:
+        await _remember_chat(event.chat)
+    except Exception:
+        pass
+    return await handler(event, data)
+
+
+@router.channel_post.outer_middleware()
+async def _seen_channels_middleware(handler, event, data):
+    try:
+        await _remember_chat(event.chat)
+    except Exception:
+        pass
+    return await handler(event, data)
+
+
+@router.message(Command("guruhlar"), F.chat.type == "private")
+async def boss_seen_chats(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    try:
+        seen = _json.loads(await db.get_setting("seen_chats") or "{}")
+    except ValueError:
+        seen = {}
+    current = await db.get_setting("report_channel_id", REPORT_CHANNEL)
+    if not seen:
+        await message.answer(
+            "Bot hali hech qanday guruhda xabar ko'rmagan.\n\n"
+            "Botni guruhga <b>admin</b> qiling va guruhda kimdir biror narsa yozishini "
+            "kuting (bir necha daqiqa), so'ng /guruhlar ni qayta yuboring.",
+            parse_mode="HTML",
+        )
+        return
+    rows = [
+        [InlineKeyboardButton(text=("✅ " if cid == str(current) else "") + title[:50], callback_data=f"setchat:{cid}")]
+        for cid, title in seen.items()
+    ]
+    await message.answer(
+        "Bot ko'rgan guruhlar. Turbo kursi uchun keraklisini bosing - "
+        "<b>obuna tekshiruvi</b> va <b>haftalik hisobot</b> shu guruhga o'tadi:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(F.data.startswith("setchat:"))
+async def boss_set_chat(callback: CallbackQuery):
+    if not is_boss(callback.from_user.id):
+        await callback.answer()
+        return
+    chat_id = int(callback.data.split(":", 1)[1])
+    try:
+        chat = await callback.bot.get_chat(chat_id)
+    except Exception as e:
+        await callback.answer(f"Bot bu guruhga kira olmayapti: {e}", show_alert=True)
+        return
+    await callback.answer("Saqlandi")
+    await _set_subscription_chat_silent(callback.bot, chat, callback.from_user.id)
 
 
 @router.message(Command("boss_score"))
