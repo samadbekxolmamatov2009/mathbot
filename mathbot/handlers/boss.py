@@ -10,8 +10,8 @@ from states import Boss
 from keyboards import NAV_BUTTON_TEXTS
 
 router = Router()
-# Shaxsiy chat + guruh ichida yoziladigan yagona buyruq: /hisobot_shu_yerga
-router.message.filter(or_f(F.chat.type == "private", Command("hisobot_shu_yerga")))
+# Shaxsiy chat + guruh ichida yoziladigan buyruqlar: /hisobot_shu_yerga, /obuna_shu_yerga
+router.message.filter(or_f(F.chat.type == "private", Command("hisobot_shu_yerga", "obuna_shu_yerga")))
 router.callback_query.filter(F.message.chat.type == "private")
 
 # Bu buyruq/tugmalar hech qayerda ADMIN_MENU_TEXTS/Bot Menu orqali boshqa
@@ -392,6 +392,39 @@ async def boss_report_here_group(message: Message):
 async def boss_report_here_channel(message: Message):
     # Kanalga faqat uning adminlari post yoza oladi.
     await _save_report_chat(message)
+
+
+# ---------- Obuna tekshiriladigan kanalni guruhning O'ZIDAN belgilash ----------
+# Boss Turbo guruhining ichida /obuna_shu_yerga deb yozadi - endi ro'yxatdan
+# o'tish va davomiy tekshiruv shu guruh a'zoligi bo'yicha bo'ladi.
+
+async def _save_subscription_chat(message: Message):
+    from config import COURSES
+    chat_id = str(message.chat.id)
+    for course_key in COURSES:
+        await db.set_setting(f"subscription_channel_{course_key}", chat_id)
+    names = ", ".join(c["name"] for c in COURSES.values())
+    try:
+        await message.answer(
+            f"✅ Endi <b>{names}</b> kursiga faqat <b>shu guruh a'zolari</b> ro'yxatdan o'ta oladi.\n"
+            f"Guruh ID: <code>{chat_id}</code>\n\n"
+            "Bot shu guruhda admin bo'lishi shart.",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
+
+
+@router.message(Command("obuna_shu_yerga"), F.chat.type.in_({"group", "supergroup"}))
+async def boss_subscription_here_group(message: Message):
+    if not message.from_user or not is_boss(message.from_user.id):
+        return
+    await _save_subscription_chat(message)
+
+
+@router.channel_post(Command("obuna_shu_yerga"))
+async def boss_subscription_here_channel(message: Message):
+    await _save_subscription_chat(message)
 
 
 @router.message(Command("boss_score"))
