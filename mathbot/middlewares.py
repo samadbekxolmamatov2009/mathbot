@@ -1,6 +1,6 @@
 """Ro'yxatdan o'tgan foydalanuvchilarning kanal obunasini DAVOMIY tekshirish.
 
-Talab: agar admin/boss foydalanuvchini kanaldan (masalan Turbo 4.0) chiqarib
+Talab: agar admin/boss foydalanuvchini kanaldan (masalan Turbo 5.0) chiqarib
 yuborsa, u botdan ham "chiqarilishi" (ro'yxatdan o'tgan holati bekor
 qilinishi) va qayta ro'yxatdan o'tishga majbur bo'lishi kerak - va obunasi
 yo'qligi sababli o'sha kursni qayta tanlab bo'lmaydi.
