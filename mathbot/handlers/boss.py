@@ -2,7 +2,7 @@ from aiogram import Router, F
 from aiogram.filters import or_f
 from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, ChatMemberUpdated
 
 import database as db
 from config import ADMIN_IDS, BOSS_IDS, DEFAULT_ADMIN_CONTACT_URL, REPORT_CHANNEL, is_boss
@@ -425,6 +425,57 @@ async def boss_subscription_here_group(message: Message):
 @router.channel_post(Command("obuna_shu_yerga"))
 async def boss_subscription_here_channel(message: Message):
     await _save_subscription_chat(message)
+
+
+# ---------- Obuna guruhini GURUHGA HECH NARSA YOZMASDAN belgilash ----------
+# Yopiq guruhning taklif havolasidan (t.me/+...) bot guruhni topa olmaydi -
+# unga guruhning raqamli ID'si kerak. ID'ni guruhga hech narsa yozmasdan
+# olishning ikki yo'li bor:
+#   1) Boss botni guruhga admin qilib qo'shadi (yoki allaqachon admin bo'lsa,
+#      uning huquqlaridan birini o'zgartirib saqlaydi). Telegram botga shu
+#      haqida xabar beradi va bot guruh ID'sini o'zi saqlaydi.
+#   2) Kanal bo'lsa: Boss kanaldagi istalgan postni botga forward qiladi.
+# Ikkala holatda ham guruhga/kanalga hech qanday xabar yuborilmaydi -
+# tasdiq faqat Boss'ning shaxsiy chatiga keladi.
+
+async def _set_subscription_chat_silent(bot, chat, boss_id: int):
+    from config import COURSES
+    chat_id = str(chat.id)
+    for course_key in COURSES:
+        await db.set_setting(f"subscription_channel_{course_key}", chat_id)
+    names = ", ".join(c["name"] for c in COURSES.values())
+    try:
+        member = await bot.get_chat_member(chat.id, boss_id)
+        check = f"✅ Tekshiruv ishlayapti (sizning holatingiz: {member.status})."
+    except Exception as e:
+        check = f"⚠️ Bot a'zolarni tekshira olmayapti: {e}\nBotni shu guruhda admin qiling."
+    try:
+        await bot.send_message(
+            boss_id,
+            f"🔒 <b>{names}</b> kursiga endi faqat <b>{chat.title or chat_id}</b> a'zolari "
+            f"ro'yxatdan o'ta oladi.\nGuruh ID: <code>{chat_id}</code>\n\n{check}",
+            parse_mode="HTML",
+        )
+    except Exception:
+        pass
+
+
+@router.my_chat_member()
+async def boss_bot_added_to_chat(event: ChatMemberUpdated):
+    if event.chat.type not in ("group", "supergroup", "channel"):
+        return
+    if event.new_chat_member.status not in ("administrator", "member"):
+        return
+    if not event.from_user or not is_boss(event.from_user.id):
+        return
+    await _set_subscription_chat_silent(event.bot, event.chat, event.from_user.id)
+
+
+@router.message(StateFilter(None), F.forward_origin.type == "channel")
+async def boss_forward_from_channel(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    await _set_subscription_chat_silent(message.bot, message.forward_origin.chat, message.from_user.id)
 
 
 @router.message(Command("boss_score"))
