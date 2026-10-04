@@ -57,11 +57,18 @@ TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "").strip()
 # bo'lishi shart). Yangi kurs qo'shmoqchi bo'lsangiz, shu ro'yxatga yangi
 # kalit qo'shing - ro'yxatdan o'tishda avtomatik variantlardan biri sifatida
 # chiqadi va o'sha kursning kanaliga obuna tekshiriladi.
+# Diqqat: lug'at kaliti ("turbo_4_0") ataylab o'zgartirilmagan - u bazada har bir
+# o'quvchining kursi sifatida saqlangan. Uni o'zgartirsangiz, eski o'quvchilar
+# kursini "yo'qotib" qo'yadi. Foydalanuvchiga ko'rinadigan nom - "name".
+#
+# Obuna tekshiriladigan kanal: yopiq (invite-link'li) guruhni get_chat_member()
+# faqat uning raqamli ID'si orqali tekshira oladi (masalan -1001234567890).
+# Uni .env / hosting sozlamalariga TURBO_CHANNEL_ID qilib yozing.
 COURSES = {
     "turbo_4_0": {
-        "name": "Turbo 4.0 MS",
-        "group_link": "https://t.me/turbomathka",
-        "channel": "@turbomathka",
+        "name": "Turbo 5.0 MS",
+        "group_link": "https://t.me/+RYEmwvMw-kw1Yzcy",
+        "channel": os.getenv("TURBO_CHANNEL_ID", "").strip() or "@turbomathka",
     },
 }
 
