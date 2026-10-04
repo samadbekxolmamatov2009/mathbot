@@ -75,13 +75,26 @@ async def send_report_schedule_loop(bot: Bot):
 
             if last_fired_at != current_minute:
                 schedules = await db.get_report_schedules()
-                matching = [
-                    s
-                    for s in schedules
-                    if s["enabled"]
-                    and s["day_of_week"] == now.weekday()
-                    and s["time_of_day"] == now.strftime("%H:%M")
-                ]
+                # Aniq bir daqiqani kutish o'rniga 10 daqiqalik oyna: bot shu
+                # daqiqada qayta ishga tushayotgan (deploy) bo'lsa ham hisobot
+                # o'tkazib yuborilmaydi. Har bir jadval kuniga bir marta ishlaydi.
+                today = now.strftime("%Y-%m-%d")
+                matching = []
+                for s in schedules:
+                    if not s["enabled"] or s["day_of_week"] != now.weekday():
+                        continue
+                    try:
+                        hh, mm = map(int, str(s["time_of_day"]).split(":"))
+                    except ValueError:
+                        continue
+                    start = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+                    if not (start <= now < start + timedelta(minutes=10)):
+                        continue
+                    key = f"report_fired_{s['id']}"
+                    if await db.get_setting(key) == today:
+                        continue
+                    await db.set_setting(key, today)
+                    matching.append(s)
                 if matching:
                     await db.set_setting("report_last_fired_at", current_minute)
                     try:
