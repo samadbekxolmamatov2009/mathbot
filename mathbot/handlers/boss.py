@@ -510,6 +510,7 @@ async def boss_report_test(message: Message):
         "📊 <b>Haftalik hisobot holati</b>",
         f"Kanal/guruh: <code>{channel}</code>",
         f"Oxirgi yuborilgan: {last_sent}",
+        f"Botdagi Toshkent vaqti: {now_tashkent().strftime('%Y-%m-%d %H:%M')} ({WEEKDAYS[now_tashkent().weekday()]})",
         f"Jadval:\n{sched_text}",
         "",
     ]
