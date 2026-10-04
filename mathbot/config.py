@@ -67,7 +67,7 @@ TURSO_AUTH_TOKEN = os.getenv("TURSO_AUTH_TOKEN", "").strip()
 COURSES = {
     "turbo_4_0": {
         "name": "Turbo 5.0 MS",
-        "group_link": "https://t.me/+RYEmwvMw-kw1Yzcy",
+        "group_link": "https://t.me/+U0a_NalUzd8zMzBi",
         "channel": os.getenv("TURBO_CHANNEL_ID", "").strip() or "@turbomathka",
     },
 }
