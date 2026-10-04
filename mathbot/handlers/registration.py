@@ -16,6 +16,7 @@ from aiogram.types import (
 import database as db
 from states import Registration
 from config import COURSES, DEFAULT_ADMIN_CONTACT_URL, is_admin, is_boss
+from middlewares import get_course_channel
 from keyboards import (
     role_keyboard,
     courses_keyboard,
@@ -60,15 +61,15 @@ def progress(step: int, total: int = 7) -> str:
 
 async def _is_subscribed(bot, user_id: int, channel: str) -> bool:
     """Foydalanuvchi berilgan kanalga obuna ekanini tekshiradi. Bot o'sha
-    kanalda admin bo'lishi shart - aks holda (yoki boshqa texnik xato bo'lsa)
-    ro'yxatdan o'tishni butunlay bloklab qo'ymaslik uchun xavfsiz tomonga
-    (obuna deb hisoblab) o'tamiz, xatoni esa logga yozamiz."""
+    kanalda admin bo'lishi shart. Tekshirib bo'lmasa (bot admin emas, kanal
+    topilmadi va h.k.) obuna EMAS deb hisoblanadi - aks holda obuna bo'lmagan
+    odam ham ro'yxatdan o'tib ketadi. Xato logga yoziladi."""
     try:
         member = await bot.get_chat_member(channel, user_id)
         return member.status not in ("left", "kicked")
     except Exception:
         logging.exception("Obuna tekshiruvida xatolik (kanal: %s, user: %s)", channel, user_id)
-        return True
+        return False
 
 
 def _subscription_gate_keyboard(admin_url: str) -> InlineKeyboardMarkup:
@@ -208,7 +209,7 @@ async def process_course(callback: CallbackQuery, state: FSMContext):
     course_key = callback.data.split(":", 1)[1]
     course = COURSES[course_key]
 
-    channel = course.get("channel")
+    channel = await get_course_channel(course_key)
     if channel and not await _is_subscribed(callback.bot, callback.from_user.id, channel):
         admin_url = await db.get_setting("admin_contact_url", DEFAULT_ADMIN_CONTACT_URL)
         await callback.answer()
