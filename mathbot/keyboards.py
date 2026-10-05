@@ -17,6 +17,7 @@ ADMIN_MENU_TEXTS = {
     "➕ A+ yaratish",
     "🗂 Mening A+ testlarim",
     "📋 Maxsus topshiriq yaratish",
+    "🗑 Maxsus topshiriqni o'chirish",
     "📢 Xabar yuborish",
     "⚙️ Sozlamalar",
     "ℹ️ Yordam",
@@ -132,6 +133,7 @@ def admin_menu_keyboard():
                 KeyboardButton(text="📢 Xabar yuborish"),
             ],
             [
+                KeyboardButton(text="🗑 Maxsus topshiriqni o'chirish"),
                 KeyboardButton(text="⚙️ Sozlamalar"),
             ],
         ],
