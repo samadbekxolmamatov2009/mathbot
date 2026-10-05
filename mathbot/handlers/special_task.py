@@ -5,7 +5,7 @@ from aiogram import Router, F
 from aiogram.dispatcher.event.bases import SkipHandler
 from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 import database as db
 from config import ADMIN_IDS, BOSS_IDS, COURSES, is_admin
@@ -121,6 +121,49 @@ async def save_special_task_name(message: Message, state: FSMContext):
         "Endi o'quvchilar \"📋 Maxsus topshiriq yuborish\" tugmasi orqali fayl yuborishlari mumkin.",
         parse_mode="HTML",
     )
+
+
+# ---------- Admin/Boss: maxsus topshiriqni o'chirish ----------
+
+@router.message(F.text == "🗑 Maxsus topshiriqni o'chirish")
+async def ask_delete_special_task(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    await state.clear()
+    task = await db.get_active_special_task()
+    if not task:
+        await message.answer("Hozircha faol maxsus topshiriq yo'q.")
+        return
+    kb = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Ha, o'chirish", callback_data=f"st_del:{task['id']}"),
+        InlineKeyboardButton(text="❌ Yo'q", callback_data="st_del_cancel"),
+    ]])
+    await message.answer(
+        f"📋 Faol maxsus topshiriq: <b>{task['name']}</b>\n\n"
+        "Uni o'chirasizmi? O'chirilgach, o'quvchilar bu topshiriq bo'yicha fayl yubora olmaydi "
+        "(avval yuborilgan ishlar saqlanib qoladi).",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
+
+
+@router.callback_query(F.data.startswith("st_del:"))
+async def confirm_delete_special_task(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    task_id = int(callback.data.split(":", 1)[1])
+    active = await db.get_active_special_task()
+    await db.deactivate_special_task(task_id)
+    name = active["name"] if active and active["id"] == task_id else "Maxsus topshiriq"
+    await callback.answer("O'chirildi")
+    await callback.message.edit_text(f"🗑 <b>{name}</b> o'chirildi. Endi faol maxsus topshiriq yo'q.", parse_mode="HTML")
+
+
+@router.callback_query(F.data == "st_del_cancel")
+async def cancel_delete_special_task(callback: CallbackQuery):
+    await callback.answer("Bekor qilindi")
+    await callback.message.edit_text("Maxsus topshiriq o'chirilmadi.")
 
 
 # ---------- O'quvchi: maxsus topshiriq bo'yicha fayl yuborish ----------
