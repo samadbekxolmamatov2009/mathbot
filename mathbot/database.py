@@ -631,6 +631,14 @@ async def create_special_task(name: str, created_by: int) -> int:
         return cursor.lastrowid
 
 
+async def deactivate_special_task(task_id: int) -> None:
+    """Maxsus topshiriqni o'chiradi (o'quvchilarga endi ko'rinmaydi).
+    Yozuv bazadan butunlay o'chirilmaydi - avval yuborilgan ishlar tarixi saqlanadi."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("UPDATE special_tasks SET is_active = 0 WHERE id = ?", (task_id,))
+        await db.commit()
+
+
 async def get_active_special_task():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
