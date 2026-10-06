@@ -455,8 +455,9 @@ async def delete_user(telegram_id: int):
 # ---------- Davomat ----------
 
 async def create_attendance_session(code: str, warning_minutes: int, report_minutes: int) -> int:
+    # Bir vaqtda bir nechta davomat faol bo'lishi mumkin - avvalgilari yopilmaydi,
+    # har biri o'z muddati tugaganda o'zi yopiladi.
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("UPDATE attendance_sessions SET is_active = 0 WHERE is_active = 1")
         cursor = await db.execute(
             """INSERT INTO attendance_sessions (code, warning_minutes, report_minutes)
                VALUES (?, ?, ?)""",
@@ -473,6 +474,16 @@ async def get_active_attendance_session():
             "SELECT * FROM attendance_sessions WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
         ) as cursor:
             return await cursor.fetchone()
+
+
+async def get_active_attendance_sessions():
+    """Barcha faol davomatlar (eng yangisi birinchi)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            "SELECT * FROM attendance_sessions WHERE is_active = 1 ORDER BY id DESC"
+        ) as cursor:
+            return await cursor.fetchall()
 
 
 async def get_attendance_session(session_id: int):
