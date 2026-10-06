@@ -153,38 +153,56 @@ async def attendance_reset_confirm_callback(callback: CallbackQuery):
 
 
 # ---------- Admin: davomat sessiyasini boshlash ----------
+# Muddatlar SOATDA kiritiladi (masalan 24 yoki 1,5), bazada esa daqiqada saqlanadi.
+# Bir vaqtda bir nechta davomat ochiq turishi mumkin.
+
+HOURS_RE = r"^\s*\d+([.,]\d+)?\s*$"
+
+
+def _hours_to_minutes(text: str) -> int:
+    return round(float(text.strip().replace(",", ".")) * 60)
+
+
+def _fmt_hours(minutes: int) -> str:
+    h = minutes / 60
+    return (f"{h:g}".replace(".", ",")) + " soat"
+
 
 async def start_attendance_admin(message: Message, state: FSMContext):
-    active = await db.get_active_attendance_session()
+    active = await db.get_active_attendance_sessions()
     if active:
+        codes = ", ".join(f"<code>{s['code']}</code>" for s in active)
         await message.answer(
-            f"ℹ️ Hozir faol davomat mavjud (kod: <code>{active['code']}</code>).\n"
-            "Yangisini boshlasangiz, avvalgisi endi hisobga olinmaydi (o'z vaqtida yakunlanadi).",
+            f"ℹ️ Hozir {len(active)} ta faol davomat bor (kodlar: {codes}).\n"
+            "Yangisini boshlasangiz, ular ham <b>o'z muddati tugaguncha faol qoladi</b> - "
+            "o'quvchilar istalgan faol davomat kodini kiritishi mumkin.",
             parse_mode="HTML",
         )
 
     await state.set_state(Attendance.waiting_warning_minutes)
     await message.answer(
-        "⏰ Necha daqiqadan keyin kod kiritmagan o'quvchilarga ogohlantirish yuborilsin?\n"
-        "Faqat son kiriting (masalan: 15)"
+        "⏰ Necha <b>soatdan</b> keyin kod kiritmagan o'quvchilarga ogohlantirish yuborilsin?\n"
+        "Faqat son kiriting (masalan: 12 yoki 1,5)",
+        parse_mode="HTML",
     )
 
 
-@router.message(Attendance.waiting_warning_minutes, F.text.regexp(r"^\d+$"))
+@router.message(Attendance.waiting_warning_minutes, F.text.regexp(HOURS_RE))
 async def set_warning_minutes(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
 
-    text = message.text.strip()
-    if int(text) <= 0:
-        await message.answer("Iltimos, musbat son kiriting (masalan: 15)")
+    minutes = _hours_to_minutes(message.text)
+    if minutes <= 0:
+        await message.answer("Iltimos, musbat son kiriting (masalan: 12)")
         return
 
-    await state.update_data(warning_minutes=int(text))
+    await state.update_data(warning_minutes=minutes)
     await state.set_state(Attendance.waiting_report_minutes)
     await message.answer(
-        "📄 Necha daqiqadan keyin yakuniy hisobot (PDF) yuborilsin?\n"
-        "Faqat son kiriting (masalan: 30)"
+        "📄 Necha <b>soatdan</b> keyin davomat yopilib, yakuniy hisobot (PDF) yuborilsin?\n"
+        "Faqat son kiriting (masalan: 24)",
+        parse_mode="HTML",
     )
 
 
@@ -192,32 +210,36 @@ async def set_warning_minutes(message: Message, state: FSMContext):
 async def set_warning_minutes_invalid(message: Message):
     if not is_admin(message.from_user.id):
         return
-    await message.answer("Iltimos, musbat son kiriting (masalan: 15)")
+    await message.answer("Iltimos, soatni son bilan kiriting (masalan: 12 yoki 1,5)")
 
 
-@router.message(Attendance.waiting_report_minutes, F.text.regexp(r"^\d+$"))
+@router.message(Attendance.waiting_report_minutes, F.text.regexp(HOURS_RE))
 async def set_report_minutes(message: Message, state: FSMContext, bot):
     if not is_admin(message.from_user.id):
         return
 
-    text = message.text.strip()
-    if int(text) <= 0:
-        await message.answer("Iltimos, musbat son kiriting (masalan: 30)")
-        return
-
-    report_minutes = int(text)
+    report_minutes = _hours_to_minutes(message.text)
     data = await state.get_data()
     warning_minutes = data["warning_minutes"]
+    if report_minutes <= 0 or report_minutes < warning_minutes:
+        await message.answer(
+            f"Hisobot vaqti ogohlantirishdan ({_fmt_hours(warning_minutes)}) keyin bo'lishi kerak. "
+            "Qaytadan kiriting (masalan: 24)"
+        )
+        return
     await state.clear()
 
-    code = f"{random.randint(0, 99):02d}"
+    # Kod faol davomatlar kodlari bilan takrorlanmasin
+    busy = {s["code"] for s in await db.get_active_attendance_sessions()}
+    free = [f"{i:02d}" for i in range(100) if f"{i:02d}" not in busy]
+    code = random.choice(free) if free else f"{random.randint(100, 999)}"
     session_id = await db.create_attendance_session(code, warning_minutes, report_minutes)
 
     await message.answer(
         "✅ <b>Davomat boshlandi!</b>\n\n"
         f"🔑 Kod: <code>{code}</code>\n"
-        f"⏰ Ogohlantirish: {warning_minutes} daqiqadan keyin\n"
-        f"📄 Hisobot: {report_minutes} daqiqadan keyin\n\n"
+        f"⏰ Ogohlantirish: {_fmt_hours(warning_minutes)}dan keyin\n"
+        f"📄 Yopilish va hisobot: {_fmt_hours(report_minutes)}dan keyin\n\n"
         "Kodni o'quvchilarga ayting. Ular \"📅 Davomat\" tugmasi orqali kiritishadi.",
         parse_mode="HTML",
     )
@@ -231,20 +253,24 @@ async def set_report_minutes(message: Message, state: FSMContext, bot):
 async def set_report_minutes_invalid(message: Message):
     if not is_admin(message.from_user.id):
         return
-    await message.answer("Iltimos, musbat son kiriting (masalan: 30)")
+    await message.answer("Iltimos, soatni son bilan kiriting (masalan: 24)")
 
 
-async def _run_attendance_session(bot, session_id: int, warning_minutes: int, report_minutes: int):
-    await asyncio.sleep(warning_minutes * 60)
+async def _run_attendance_session(bot, session_id: int, warning_minutes: int, report_minutes: int,
+                                  elapsed_seconds: float = 0):
+    """elapsed_seconds - bot qayta ishga tushganda davomat boshlanganidan beri
+    o'tgan vaqt: qolgan vaqt kutiladi, o'tib ketgan ogohlantirish qayta yuborilmaydi."""
+    warn_left = warning_minutes * 60 - elapsed_seconds
+    if warn_left > 0:
+        await asyncio.sleep(warn_left)
+        unattended = await db.get_unattended_user_ids(session_id)
+        for user_id in unattended:
+            try:
+                await bot.send_message(user_id, "❗️ Hurmatli o'quvchi, darslarni qoldirmang!")
+            except Exception:
+                pass
 
-    unattended = await db.get_unattended_user_ids(session_id)
-    for user_id in unattended:
-        try:
-            await bot.send_message(user_id, "❗️ Hurmatli o'quvchi, darslarni qoldirmang!")
-        except Exception:
-            pass
-
-    remaining = (report_minutes - warning_minutes) * 60
+    remaining = report_minutes * 60 - max(elapsed_seconds, warning_minutes * 60)
     if remaining > 0:
         await asyncio.sleep(remaining)
 
@@ -285,6 +311,21 @@ async def _run_attendance_session(bot, session_id: int, warning_minutes: int, re
             pass
 
 
+@router.startup()
+async def _resume_attendance_sessions(bot):
+    """Bot qayta ishga tushganda (deploy) faol davomatlar taymeri yo'qolmasin."""
+    from datetime import datetime, timezone
+    for s_ in await db.get_active_attendance_sessions():
+        try:
+            created = datetime.strptime(str(s_["created_at"])[:19], "%Y-%m-%d %H:%M:%S")
+            elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - created).total_seconds()
+        except ValueError:
+            elapsed = 0
+        asyncio.create_task(_run_attendance_session(
+            bot, s_["id"], s_["warning_minutes"], s_["report_minutes"], elapsed_seconds=max(0, elapsed)
+        ))
+
+
 # ---------- O'quvchi: kodni kiritish ----------
 
 async def start_attendance_user(message: Message, state: FSMContext):
@@ -293,36 +334,36 @@ async def start_attendance_user(message: Message, state: FSMContext):
         await message.answer("Iltimos, avval /start orqali ro'yxatdan o'ting.")
         return
 
-    session = await db.get_active_attendance_session()
-    if not session:
+    sessions = await db.get_active_attendance_sessions()
+    if not sessions:
         await message.answer("Hozircha faol davomat mavjud emas.")
         return
 
-    if await db.has_submitted_attendance(session["id"], message.from_user.id):
-        await message.answer("✅ Siz allaqachon ushbu darsga davomat belgilagansiz.")
+    pending = [s_ for s_ in sessions if not await db.has_submitted_attendance(s_["id"], message.from_user.id)]
+    if not pending:
+        await message.answer("✅ Siz barcha faol darslarga davomat belgilagansiz.")
         return
 
     await state.set_state(AttendanceCode.waiting_code)
-    await state.update_data(session_id=session["id"])
     await message.answer("🔑 Ustozingiz aytgan davomat kodini kiriting:")
 
 
 @router.message(AttendanceCode.waiting_code, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
 async def process_attendance_code(message: Message, state: FSMContext):
-    data = await state.get_data()
-    session_id = data.get("session_id")
-    session = await db.get_attendance_session(session_id)
+    code = message.text.strip()
+    sessions = [s_ for s_ in await db.get_active_attendance_sessions() if s_["code"] == code]
 
-    if not session or not session["is_active"]:
-        await message.answer("Bu davomat sessiyasi allaqachon yakunlangan.")
+    if not sessions:
+        await message.answer("❌ Kod noto'g'ri yoki bu davomat yakunlangan. Qaytadan urinib ko'ring:")
+        return
+
+    session = sessions[0]
+    if await db.has_submitted_attendance(session["id"], message.from_user.id):
         await state.clear()
+        await message.answer("✅ Siz bu darsga allaqachon davomat belgilagansiz.")
         return
 
-    if message.text.strip() != session["code"]:
-        await message.answer("❌ Kod noto'g'ri. Qaytadan urinib ko'ring:")
-        return
-
-    await db.record_attendance(session_id, message.from_user.id)
+    await db.record_attendance(session["id"], message.from_user.id)
     await state.clear()
     await message.answer("✅ Davomatingiz qabul qilindi. Rahmat!")
 
