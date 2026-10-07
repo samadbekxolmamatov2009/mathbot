@@ -44,6 +44,7 @@ const els = {
   infoText: document.getElementById("infoText"),
   testNameLabel: document.getElementById("testNameLabel"),
   lateWarning: document.getElementById("lateWarning"),
+  deadlineInfo: document.getElementById("deadlineInfo"),
   questionList: document.getElementById("questionList"),
   progressTrack: document.getElementById("progressTrack"),
   progressFill: document.getElementById("progressFill"),
@@ -188,6 +189,7 @@ function renderResult(score, total, details, late) {
   els.questionList.hidden = true;
   els.submitBar.hidden = true;
   els.lateWarning.hidden = true;
+  if (els.deadlineInfo) els.deadlineInfo.hidden = true;
   if (isTelegram) tg.MainButton.hide();
 
   const pct = total ? Math.round((score / total) * 100) : 0;
@@ -323,6 +325,10 @@ async function init() {
 
     if (data.window_status === "ended") {
       showLateWarning();
+    } else if (data.window_status === "active" && data.end_time && els.deadlineInfo) {
+      const [d, t] = formatDateTime(data.end_time).split(" ");
+      els.deadlineInfo.textContent = `🟢 Test ${d} kuni soat ${(t || "").slice(0, 5)} gacha davom etadi`;
+      els.deadlineInfo.hidden = false;
     }
 
     fields = data.fields || [];
