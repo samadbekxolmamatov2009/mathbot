@@ -615,6 +615,79 @@ async def boss_set_chat(callback: CallbackQuery):
     await _set_subscription_chat_silent(callback.bot, chat, callback.from_user.id)
 
 
+# ---------- Hazillar: /hazil va /hazil_yubor ----------
+
+def _next_joke_time(now, sent_today: bool):
+    """Navbatdagi hazil yuboriladigan sana-vaqt (chorshanba/shanba 14:00)."""
+    from datetime import timedelta
+    from config import JOKE_DAYS, JOKE_TIME
+    for add_days in range(0, 8):
+        day = (now + timedelta(days=add_days)).replace(
+            hour=JOKE_TIME[0], minute=JOKE_TIME[1], second=0, microsecond=0
+        )
+        if day.weekday() not in JOKE_DAYS:
+            continue
+        if add_days == 0 and (sent_today or now >= day + timedelta(minutes=10)):
+            continue
+        return day
+    return None
+
+
+@router.message(Command("hazil"), F.chat.type == "private")
+async def boss_show_joke(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    from config import JOKES
+    from timezone_utils import now_tashkent
+    WEEKDAYS = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
+    now = now_tashkent()
+    index = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
+    sent_today = await db.get_setting("joke_last_sent_date") == now.strftime("%Y-%m-%d")
+    nxt = _next_joke_time(now, sent_today)
+    when = f"{nxt.strftime('%d.%m.%Y')} ({WEEKDAYS[nxt.weekday()]}) soat {nxt.strftime('%H:%M')}" if nxt else "-"
+    sticker = await db.get_setting("joke_sticker_id")
+    await message.answer(
+        f"😄 <b>Navbatdagi hazil: {index + 1}-chi (jami {len(JOKES)} ta)</b>\n"
+        f"📅 Yuboriladi: {when}\n"
+        f"🎨 Stiker: {'bor' if sticker else 'yo‘q (botga stiker yuboring)'}\n\n"
+        f"{JOKES[index]}\n\n"
+        "Hozir guruhga yuborish: /hazil_yubor",
+        parse_mode="HTML",
+    )
+    if sticker:
+        try:
+            await message.answer_sticker(sticker)
+        except Exception:
+            pass
+
+
+@router.message(Command("hazil_yubor"), F.chat.type == "private")
+async def boss_send_joke_now(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    from config import JOKES
+    index = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
+    channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
+    try:
+        await message.bot.send_message(channel, JOKES[index])
+        sticker = await db.get_setting("joke_sticker_id")
+        if sticker:
+            await message.bot.send_sticker(channel, sticker)
+    except Exception as e:
+        import html as _h
+        await message.answer(
+            f"❌ Guruhga yuborib bo'lmadi:\n<code>{_h.escape(str(e))}</code>\n\n"
+            "Hisobot kanali to'g'ri sozlanganini /hisobot_test bilan tekshiring.",
+            parse_mode="HTML",
+        )
+        return
+    await db.set_setting("joke_index", str((index + 1) % len(JOKES)))
+    await message.answer(
+        f"✅ {index + 1}-hazil guruhga yuborildi. Navbat keyingi hazilga o'tdi "
+        f"(keyingisi: {(index + 1) % len(JOKES) + 1}-chi)."
+    )
+
+
 # ---------- Hazil stikeri ----------
 # Boss botga shaxsiy chatda istalgan stikerni yuborsa - u chorshanba/shanba
 # 14:00 dagi hazildan keyin guruhga tashlanadigan stiker bo'lib saqlanadi.
