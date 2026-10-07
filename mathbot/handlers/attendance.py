@@ -6,6 +6,7 @@ import tempfile
 from aiogram import Router, F
 from aiogram.filters import BaseFilter
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     Message,
     FSInputFile,
@@ -40,6 +41,7 @@ async def davomat_button(message: Message, state: FSMContext):
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [InlineKeyboardButton(text="🆕 Yangi davomat boshlash", callback_data="attendance_new")],
+                [InlineKeyboardButton(text="⏱ Muddatni o'zgartirish", callback_data="attendance_edit")],
                 [InlineKeyboardButton(text="📊 Jadvalni ko'rish", callback_data="attendance_matrix")],
                 [InlineKeyboardButton(text="🔄 Davomatni yangilash", callback_data="attendance_reset_ask")],
             ]
@@ -256,23 +258,37 @@ async def set_report_minutes_invalid(message: Message):
     await message.answer("Iltimos, soatni son bilan kiriting (masalan: 24)")
 
 
+def _session_elapsed_seconds(session) -> float:
+    from datetime import datetime, timezone
+    try:
+        created = datetime.strptime(str(session["created_at"])[:19], "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return 0
+    return (datetime.now(timezone.utc).replace(tzinfo=None) - created).total_seconds()
+
+
 async def _run_attendance_session(bot, session_id: int, warning_minutes: int, report_minutes: int,
                                   elapsed_seconds: float = 0):
-    """elapsed_seconds - bot qayta ishga tushganda davomat boshlanganidan beri
-    o'tgan vaqt: qolgan vaqt kutiladi, o'tib ketgan ogohlantirish qayta yuborilmaydi."""
-    warn_left = warning_minutes * 60 - elapsed_seconds
-    if warn_left > 0:
-        await asyncio.sleep(warn_left)
-        unattended = await db.get_unattended_user_ids(session_id)
-        for user_id in unattended:
-            try:
-                await bot.send_message(user_id, "❗️ Hurmatli o'quvchi, darslarni qoldirmang!")
-            except Exception:
-                pass
-
-    remaining = report_minutes * 60 - max(elapsed_seconds, warning_minutes * 60)
-    if remaining > 0:
-        await asyncio.sleep(remaining)
+    """Davomatni kuzatadi. Muddat har 30 soniyada bazadan qayta o'qiladi - shuning
+    uchun admin "⏱ Muddatni o'zgartirish" orqali vaqtni o'zgartirsa, darhol hisobga olinadi.
+    Bot qayta ishga tushganda o'tib ketgan ogohlantirish qayta yuborilmaydi."""
+    warned = elapsed_seconds >= warning_minutes * 60
+    while True:
+        session = await db.get_attendance_session(session_id)
+        if not session or not session["is_active"]:
+            return
+        elapsed = _session_elapsed_seconds(session)
+        if not warned and elapsed >= session["warning_minutes"] * 60:
+            warned = True
+            for user_id in await db.get_unattended_user_ids(session_id):
+                try:
+                    await bot.send_message(user_id, "❗️ Hurmatli o'quvchi, darslarni qoldirmang!")
+                except Exception:
+                    pass
+        left = session["report_minutes"] * 60 - elapsed
+        if left <= 0:
+            break
+        await asyncio.sleep(min(30, max(1, left)))
 
     await db.close_attendance_session(session_id)
 
@@ -314,16 +330,122 @@ async def _run_attendance_session(bot, session_id: int, warning_minutes: int, re
 @router.startup()
 async def _resume_attendance_sessions(bot):
     """Bot qayta ishga tushganda (deploy) faol davomatlar taymeri yo'qolmasin."""
-    from datetime import datetime, timezone
     for s_ in await db.get_active_attendance_sessions():
-        try:
-            created = datetime.strptime(str(s_["created_at"])[:19], "%Y-%m-%d %H:%M:%S")
-            elapsed = (datetime.now(timezone.utc).replace(tzinfo=None) - created).total_seconds()
-        except ValueError:
-            elapsed = 0
         asyncio.create_task(_run_attendance_session(
-            bot, s_["id"], s_["warning_minutes"], s_["report_minutes"], elapsed_seconds=max(0, elapsed)
+            bot, s_["id"], s_["warning_minutes"], s_["report_minutes"],
+            elapsed_seconds=max(0, _session_elapsed_seconds(s_)),
         ))
+
+
+# ---------- Admin: faol davomat muddatini o'zgartirish ----------
+
+class AttendanceEdit(StatesGroup):
+    waiting_hours = State()
+
+
+class AbsenceReply(StatesGroup):
+    waiting_text = State()
+
+
+@router.callback_query(F.data == "attendance_edit")
+async def attendance_edit_list(callback: CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    await callback.answer()
+    sessions = await db.get_active_attendance_sessions()
+    if not sessions:
+        await callback.message.answer("Hozir faol davomat yo'q.")
+        return
+    rows = [
+        [InlineKeyboardButton(
+            text=f"Kod {s_['code']} — hozir {_fmt_hours(s_['report_minutes'])}",
+            callback_data=f"attedit:{s_['id']}",
+        )]
+        for s_ in sessions
+    ]
+    await callback.message.answer(
+        "Qaysi davomatning muddatini o'zgartirasiz?",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+@router.callback_query(F.data.startswith("attedit:"))
+async def attendance_edit_pick(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    await callback.answer()
+    session_id = int(callback.data.split(":", 1)[1])
+    session = await db.get_attendance_session(session_id)
+    if not session or not session["is_active"]:
+        await callback.message.answer("Bu davomat allaqachon yopilgan.")
+        return
+    passed = _session_elapsed_seconds(session) / 3600
+    await state.set_state(AttendanceEdit.waiting_hours)
+    await state.update_data(edit_session_id=session_id)
+    await callback.message.answer(
+        f"🔑 Kod <code>{session['code']}</code>: hozirgi muddat {_fmt_hours(session['report_minutes'])} "
+        f"(boshlanganiga {passed:.1f} soat bo'ldi).\n\n"
+        "Yangi muddatni <b>davomat boshlangan vaqtdan hisoblab</b> soatda kiriting (masalan: 24):",
+        parse_mode="HTML",
+    )
+
+
+@router.message(AttendanceEdit.waiting_hours, F.text.regexp(HOURS_RE))
+async def attendance_edit_save(message: Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    data = await state.get_data()
+    session = await db.get_attendance_session(data.get("edit_session_id", 0))
+    await state.clear()
+    if not session or not session["is_active"]:
+        await message.answer("Bu davomat allaqachon yopilgan.")
+        return
+    minutes = _hours_to_minutes(message.text)
+    if minutes * 60 <= _session_elapsed_seconds(session):
+        await message.answer("⚠️ Bu vaqt allaqachon o'tib ketgan - davomat bir necha soniyada yopiladi.")
+    await db.update_attendance_report_minutes(session["id"], minutes)
+    await message.answer(
+        f"✅ Kod <code>{session['code']}</code>: davomat endi boshlanganidan "
+        f"<b>{_fmt_hours(minutes)}</b> o'tib yopiladi.",
+        parse_mode="HTML",
+    )
+
+
+@router.message(AttendanceEdit.waiting_hours, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
+async def attendance_edit_invalid(message: Message):
+    await message.answer("Iltimos, soatni son bilan kiriting (masalan: 24)")
+
+
+# ---------- Admin: o'quvchining qatnashmaslik sababiga javob yozish ----------
+
+@router.callback_query(F.data.startswith("absreply:"))
+async def absence_reply_start(callback: CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer()
+        return
+    await callback.answer()
+    user_id = int(callback.data.split(":", 1)[1])
+    user = await db.get_user(user_id)
+    name = (user["full_name"] if user else None) or "o'quvchi"
+    await state.set_state(AbsenceReply.waiting_text)
+    await state.update_data(reply_user_id=user_id)
+    await callback.message.answer(f"✍️ <b>{name}</b> ga javobingizni yozing:", parse_mode="HTML")
+
+
+@router.message(AbsenceReply.waiting_text, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
+async def absence_reply_send(message: Message, state: FSMContext, bot):
+    if not is_admin(message.from_user.id):
+        return
+    data = await state.get_data()
+    await state.clear()
+    user_id = data.get("reply_user_id")
+    try:
+        await bot.send_message(user_id, f"📩 <b>Ustozingiz javobi:</b>\n\n{message.text}", parse_mode="HTML")
+        await message.answer("✅ Javobingiz o'quvchiga yuborildi.")
+    except Exception:
+        await message.answer("❌ Yuborib bo'lmadi (o'quvchi botni bloklagan bo'lishi mumkin).")
 
 
 # ---------- O'quvchi: kodni kiritish ----------
@@ -390,6 +512,9 @@ async def process_absence_reason(message: Message, bot):
                 f"ketma-ket {CONSECUTIVE_MISS_THRESHOLD} kun darsga qatnashmadi.\n\n"
                 f"📝 Sababi: {message.text}",
                 parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                    InlineKeyboardButton(text="✍️ Javob yozish", callback_data=f"absreply:{message.from_user.id}")
+                ]]),
             )
         except Exception:
             pass
