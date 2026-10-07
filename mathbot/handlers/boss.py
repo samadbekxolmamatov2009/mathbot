@@ -615,6 +615,30 @@ async def boss_set_chat(callback: CallbackQuery):
     await _set_subscription_chat_silent(callback.bot, chat, callback.from_user.id)
 
 
+# ---------- Hazil stikeri ----------
+# Boss botga shaxsiy chatda istalgan stikerni yuborsa - u chorshanba/shanba
+# 14:00 dagi hazildan keyin guruhga tashlanadigan stiker bo'lib saqlanadi.
+# /stikersiz - stikerni olib tashlash.
+
+@router.message(StateFilter(None), F.sticker)
+async def boss_set_joke_sticker(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    await db.set_setting("joke_sticker_id", message.sticker.file_id)
+    await message.answer(
+        "✅ Shu stiker saqlandi - endi chorshanba va shanba 14:00 dagi hazildan keyin "
+        "guruhga yuboriladi.\nOlib tashlash uchun: /stikersiz"
+    )
+
+
+@router.message(Command("stikersiz"))
+async def boss_remove_joke_sticker(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    await db.set_setting("joke_sticker_id", "")
+    await message.answer("🗑 Hazil stikeri olib tashlandi - endi faqat matn yuboriladi.")
+
+
 @router.message(Command("boss_score"))
 async def boss_score_command(message: Message, command: CommandObject):
     if not is_boss(message.from_user.id):
