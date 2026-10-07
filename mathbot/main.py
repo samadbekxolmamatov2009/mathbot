@@ -216,39 +216,65 @@ async def notify_new_activities_loop(bot: Bot):
         await asyncio.sleep(NOTIFY_CHECK_INTERVAL)
 
 
+# Har chorshanba va shanba soat 14:00 da guruhga yuboriladigan hazillar.
+# Ketma-ket yuboriladi: 1, 2, 3, 4, 5, 6, keyin yana 1 dan - bitta hazil qolgan
+# 5 tasi ishlatilmaguncha takrorlanmaydi. Navbat bazada saqlanadi (deploydan keyin ham davom etadi).
+JOKE_DAYS = (2, 5)  # 2 = chorshanba, 5 = shanba
+JOKE_TIME = (14, 0)
+JOKES = [
+    "🤖 Salom, Turbo jamoasi! Men bu yerda bir haftadan beri zerikib o'tiribman... 😴\n"
+    "Vazifalarni qiling, shunda men ham ishlab, ball qo'yib zavqlanaman! 📚✍️",
+
+    "😩 Voy-voy-voy... Yana bir kun o'tdi, men hali biror vazifa ko'rmadim!\n"
+    "Testlaringizni kutaverib, mening ham simlarim chang bosib ketdi 🕸\n"
+    "Qani, kim birinchi bo'lib meni xursand qiladi? 🏆",
+
+    "⏰ Diqqat, diqqat! Bot gapiryapti!\n"
+    "Agar vazifalar topshirilmasa, men har kuni \"salom\" deb yozib, sizni charchatib qo'yaman 😈\n"
+    "Yaxshisi, vazifalarni qilib qo'ying 😁",
+
+    "🎙 Assalomu alaykum, aziz tomoshabinlar! Soat 14:00...\n"
+    "Jamoamiz hali ham \"vazifa\" degan to'pni darvozaga kiritmadi! ⚽️\n"
+    "Kim birinchi bo'lib gol uradi? Reytingda joy bo'sh turibdi! 🥇",
+
+    "🥱 Men zerikdim...\n"
+    "📚 Siz esa vazifani qilmadingiz...\n"
+    "🤝 Keling, ikkalamiz ham bu muammoni hal qilamiz: siz vazifani qiling, men ball qo'yaman!",
+
+    "📐 Bugungi tenglama:\n"
+    "Bot + zerikish = 💤\n"
+    "Bot + vazifalar = 🔥\n"
+    "Xulosa: vazifalarni topshiring, botni uyg'oting! 😄",
+]
+
+
 async def send_broadcast_schedule_loop(bot: Bot):
-    """Rejalashtirilgan xabarni belgilangan kun/vaqtda kanalga yuboradi
-    (har bir foydalanuvchiga alohida emas - "⚙️ Sozlamalar" orqali admin
-    belgilagan kun/vaqtda, biriktirilgan fayl (masalan PDF) bo'lsa hujjat
-    sifatida, bo'lmasa oddiy matn sifatida, sozlamalardagi kanalga)."""
+    """Chorshanba va shanba 14:00 da guruhga navbatdagi hazilni (va Boss tanlagan
+    stikerni) yuboradi. Belgilangan vaqtdan keyingi 10 daqiqa ichida yuboriladi -
+    shu payt bot qayta ishga tushayotgan bo'lsa ham o'tkazib yuborilmaydi."""
     while True:
         try:
-            schedule = await db.get_broadcast_schedule()
-            if schedule and schedule["enabled"]:
-                now = now_tashkent()
-                current_week = now.strftime("%G-W%V")
-                if (
-                    now.weekday() == schedule["day_of_week"]
-                    and now.strftime("%H:%M") == schedule["time_of_day"]
-                    and schedule["last_sent_week"] != current_week
-                ):
-                    channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
-                    try:
-                        file_data = schedule["file_data"]
-                        if file_data:
-                            file_bytes = base64.b64decode(file_data)
-                            file_name = schedule["file_name"] or "fayl.pdf"
-                            document = BufferedInputFile(file_bytes, filename=file_name)
-                            await bot.send_document(
-                                channel, document, caption=(schedule["message"] or None)
-                            )
-                        else:
-                            await bot.send_message(channel, schedule["message"])
-                    except Exception:
-                        logging.exception("Rejalashtirilgan xabarni kanalga yuborishda xatolik")
-                    await db.mark_broadcast_sent(current_week)
+            now = now_tashkent()
+            start = now.replace(hour=JOKE_TIME[0], minute=JOKE_TIME[1], second=0, microsecond=0)
+            today = now.strftime("%Y-%m-%d")
+            if (
+                now.weekday() in JOKE_DAYS
+                and start <= now < start + timedelta(minutes=10)
+                and await db.get_setting("joke_last_sent_date") != today
+            ):
+                await db.set_setting("joke_last_sent_date", today)
+                index = int(await db.get_setting("joke_index", "0") or 0)
+                channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
+                try:
+                    await bot.send_message(channel, JOKES[index % len(JOKES)])
+                    sticker = await db.get_setting("joke_sticker_id")
+                    if sticker:
+                        await bot.send_sticker(channel, sticker)
+                except Exception:
+                    logging.exception("Hazilni guruhga yuborishda xatolik")
+                await db.set_setting("joke_index", str((index + 1) % len(JOKES)))
         except Exception:
-            logging.exception("Rejalashtirilgan xabarni yuborishda xatolik yuz berdi")
+            logging.exception("Hazil yuborish jarayonida xatolik yuz berdi")
         await asyncio.sleep(BROADCAST_CHECK_INTERVAL)
 
 
