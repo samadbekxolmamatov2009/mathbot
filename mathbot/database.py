@@ -495,6 +495,15 @@ async def get_attendance_session(session_id: int):
             return await cursor.fetchone()
 
 
+async def update_attendance_report_minutes(session_id: int, report_minutes: int) -> None:
+    """Faol davomatning yopilish muddatini o'zgartiradi (boshlangan vaqtdan hisoblab, daqiqada)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "UPDATE attendance_sessions SET report_minutes = ? WHERE id = ?", (report_minutes, session_id)
+        )
+        await db.commit()
+
+
 async def close_attendance_session(session_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
