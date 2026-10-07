@@ -118,6 +118,18 @@ button {
   text-align: center;
 }
 
+.deadline-info {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1.5px solid #2e9e5b;
+  background: #e8f7ee;
+  color: #1e7a45;
+  font-size: 13px;
+  text-align: center;
+  font-weight: 600;
+}
+
 .late-warning {
   margin: 8px 0 0;
   padding: 10px 12px;
