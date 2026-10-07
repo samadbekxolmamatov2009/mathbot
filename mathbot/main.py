@@ -16,6 +16,9 @@ from config import (
     ADMIN_IDS,
     BOSS_IDS,
     BOT_TOKEN,
+    JOKE_DAYS,
+    JOKE_TIME,
+    JOKES,
     REPORT_CHANNEL,
     WEBAPP_HOST,
     WEBAPP_PORT,
@@ -216,36 +219,7 @@ async def notify_new_activities_loop(bot: Bot):
         await asyncio.sleep(NOTIFY_CHECK_INTERVAL)
 
 
-# Har chorshanba va shanba soat 14:00 da guruhga yuboriladigan hazillar.
-# Ketma-ket yuboriladi: 1, 2, 3, 4, 5, 6, keyin yana 1 dan - bitta hazil qolgan
-# 5 tasi ishlatilmaguncha takrorlanmaydi. Navbat bazada saqlanadi (deploydan keyin ham davom etadi).
-JOKE_DAYS = (2, 5)  # 2 = chorshanba, 5 = shanba
-JOKE_TIME = (14, 0)
-JOKES = [
-    "🤖 Salom, Turbo jamoasi! Men bu yerda bir haftadan beri zerikib o'tiribman... 😴\n"
-    "Vazifalarni qiling, shunda men ham ishlab, ball qo'yib zavqlanaman! 📚✍️",
-
-    "😩 Voy-voy-voy... Yana bir kun o'tdi, men hali biror vazifa ko'rmadim!\n"
-    "Testlaringizni kutaverib, mening ham simlarim chang bosib ketdi 🕸\n"
-    "Qani, kim birinchi bo'lib meni xursand qiladi? 🏆",
-
-    "⏰ Diqqat, diqqat! Bot gapiryapti!\n"
-    "Agar vazifalar topshirilmasa, men har kuni \"salom\" deb yozib, sizni charchatib qo'yaman 😈\n"
-    "Yaxshisi, vazifalarni qilib qo'ying 😁",
-
-    "🎙 Assalomu alaykum, aziz tomoshabinlar! Soat 14:00...\n"
-    "Jamoamiz hali ham \"vazifa\" degan to'pni darvozaga kiritmadi! ⚽️\n"
-    "Kim birinchi bo'lib gol uradi? Reytingda joy bo'sh turibdi! 🥇",
-
-    "🥱 Men zerikdim...\n"
-    "📚 Siz esa vazifani qilmadingiz...\n"
-    "🤝 Keling, ikkalamiz ham bu muammoni hal qilamiz: siz vazifani qiling, men ball qo'yaman!",
-
-    "📐 Bugungi tenglama:\n"
-    "Bot + zerikish = 💤\n"
-    "Bot + vazifalar = 🔥\n"
-    "Xulosa: vazifalarni topshiring, botni uyg'oting! 😄",
-]
+# Hazillar ro'yxati, kunlar va vaqt config.py da (JOKES, JOKE_DAYS, JOKE_TIME).
 
 
 async def send_broadcast_schedule_loop(bot: Bot):
