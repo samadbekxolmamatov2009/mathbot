@@ -411,6 +411,7 @@
   var ICON = {
     call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>',
     tg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>',
+    msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
     copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   };
 
@@ -433,6 +434,15 @@
              : '<span class="act disabled">' + ICON.call + "Raqam yo'q</span>") +
         '<button class="act" type="button" id="actTg">' + ICON.tg + "Telegram</button>" +
         '<button class="act" type="button" id="actCopy"' + (tel ? "" : " disabled") + ">" + ICON.copy + "Nusxalash</button>" +
+        '<button class="act act-wide act-msg" type="button" id="actMsg">' + ICON.msg + "Botdan xabar yuborish</button>" +
+      "</div>" +
+      '<div class="composer" id="composer" hidden>' +
+        '<div class="composer-title">💬 Xabar: <b>' + esc(s.full_name || "O'quvchi") + "</b></div>" +
+        '<p class="composer-hint">Xabar faqat shu o\'quvchiga, bot nomidan boradi. Raqami Telegram\'niki bo\'lmasa ham yetib boradi.</p>' +
+        '<textarea id="msgText" maxlength="3500" placeholder="Masalan: Assalomu alaykum, nega darsga kelmayapsiz?"></textarea>' +
+        '<p class="note-error" id="msgError" hidden></p>' +
+        '<div class="composer-row"><button class="btn btn-soft" id="msgCancel" type="button">Bekor qilish</button>' +
+        '<button class="btn btn-primary" id="msgSend" type="button">Yuborish</button></div>' +
       "</div>" +
 
       '<div class="kpis">' +
@@ -466,6 +476,15 @@
         window.location.href = url;
       } catch (e) { toast("Telegram ochilmadi — raqamni nusxalab qidiring"); }
     });
+    $("actMsg").addEventListener("click", function () {
+      haptic();
+      var box = $("composer");
+      box.hidden = !box.hidden;
+      if (!box.hidden) { box.scrollIntoView({ behavior: "smooth", block: "center" }); $("msgText").focus(); }
+    });
+    $("msgCancel").addEventListener("click", function () { $("composer").hidden = true; $("msgError").hidden = true; });
+    $("msgSend").addEventListener("click", function () { sendMessage(s); });
+    $("msgText").addEventListener("input", function () { $("msgError").hidden = true; });
     $("actCopy").addEventListener("click", function () {
       copyText(tel);
     });
@@ -558,6 +577,46 @@
     }).catch(function () {
       err.textContent = "Saqlab bo'lmadi. Qayta urinib ko'ring."; err.hidden = false; haptic("err");
     }).then(function () { btn.disabled = false; });
+  }
+
+  var MSG_ERRORS = {
+    blocked: "O'quvchi botni bloklagan yoki akkaunti o'chirilgan — xabar yetmaydi.",
+    chat_not_found: "Bu o'quvchi botda chat ochmagan — xabar yetmaydi.",
+    too_many: "Juda ko'p xabar yuborildi. Bir daqiqadan keyin urinib ko'ring.",
+    empty_message: "Xabar matnini yozing.",
+    message_too_long: "Xabar juda uzun.",
+    telegram_unreachable: "Telegram bilan bog'lanib bo'lmadi. Qayta urinib ko'ring.",
+  };
+
+  function sendMessage(s) {
+    var ta = $("msgText"), btn = $("msgSend"), err = $("msgError");
+    var text = ta.value.trim();
+    err.hidden = true;
+    if (!text) { err.textContent = MSG_ERRORS.empty_message; err.hidden = false; haptic("err"); return; }
+
+    var go = function () {
+      var id = s.telegram_id;
+      btn.disabled = true; btn.textContent = "Yuborilmoqda...";
+      api("/api/panel/student/" + encodeURIComponent(id) + "/message", { method: "POST", body: { text: text } })
+        .then(function (data) {
+          if (!current || String(current.id) !== String(id)) return;
+          ta.value = "";
+          $("composer").hidden = true;
+          current.data.notes = data.notes;
+          renderNotes(data.notes);
+          haptic("ok"); toast("Xabar yuborildi ✓");
+        })
+        .catch(function (e) {
+          err.textContent = MSG_ERRORS[e.message] || "Yuborib bo'lmadi. Qayta urinib ko'ring.";
+          err.hidden = false; haptic("err");
+        })
+        .then(function () { btn.disabled = false; btn.textContent = "Yuborish"; });
+    };
+
+    // Adashib yuborib yubormaslik uchun tasdiq so'raymiz
+    var question = (s.full_name || "O'quvchi") + "ga xabar yuborilsinmi?";
+    if (tg && tg.showConfirm) tg.showConfirm(question, function (ok) { if (ok) go(); });
+    else if (window.confirm(question)) go();
   }
 
   function copyText(text) {
