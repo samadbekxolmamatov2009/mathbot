@@ -431,7 +431,7 @@
       '<div class="actions">' +
         (tel ? '<a class="act act-call" href="tel:' + esc(tel) + '">' + ICON.call + "Qo'ng'iroq</a>"
              : '<span class="act disabled">' + ICON.call + "Raqam yo'q</span>") +
-        '<a class="act" href="tg://user?id=' + esc(s.telegram_id) + '">' + ICON.tg + "Telegram</a>" +
+        '<button class="act" type="button" id="actTg">' + ICON.tg + "Telegram</button>" +
         '<button class="act" type="button" id="actCopy"' + (tel ? "" : " disabled") + ">" + ICON.copy + "Nusxalash</button>" +
       "</div>" +
 
@@ -455,6 +455,17 @@
         '<p class="note-error" id="noteError" hidden></p>' +
         '<button class="btn btn-primary" id="noteBtn" type="button">Izoh qo\'shish</button></div>';
 
+    // Mini App ichida tg:// havolalari ko'p mijozlarda ochilmaydi - t.me havolasi
+    // openTelegramLink orqali ishonchli ochiladi. Avval telefon raqami bo'yicha
+    // (o'quvchi botga raqamini Telegram kontakti orqali yuborgan), bo'lmasa ID bo'yicha.
+    $("actTg").addEventListener("click", function () {
+      haptic();
+      var url = tel ? "https://t.me/" + tel : "tg://user?id=" + s.telegram_id;
+      try {
+        if (tg && tg.openTelegramLink && tel) { tg.openTelegramLink(url); return; }
+        window.location.href = url;
+      } catch (e) { toast("Telegram ochilmadi — raqamni nusxalab qidiring"); }
+    });
     $("actCopy").addEventListener("click", function () {
       copyText(tel);
     });
