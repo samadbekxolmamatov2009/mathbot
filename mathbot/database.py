@@ -1413,3 +1413,236 @@ async def mark_special_task_notified(task_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute("UPDATE special_tasks SET notified = 1 WHERE id = ?", (task_id,))
         await db.commit()
+
+
+# ---------- Admin panel (Mini App) ----------
+# Admin/Boss uchun "🖥 Admin panel" Mini App'i shu funksiyalardan foydalanadi.
+# Har bir o'quvchi uchun vazifa va davomat hisobi FAQAT u ro'yxatdan o'tganidan
+# keyingi testlar/sessiyalar bo'yicha olinadi - yangi qo'shilgan o'quvchi hali
+# bo'lmagan testlar uchun "qilmagan" hisoblanmaydi va ro'yxat tepasiga chiqmaydi.
+
+_PANEL_COLS = (
+    "telegram_id", "full_name", "course", "region", "district", "phone",
+    "registered_at", "role", "days_registered", "tests_done", "tests_total",
+    "attendance_attended", "attendance_total", "tests_missed", "attendance_missed",
+)
+
+_PANEL_INNER = """
+    SELECT u.telegram_id, u.full_name, u.course, u.region, u.district, u.phone,
+           u.registered_at, u.role,
+           CAST(julianday('now') - julianday(u.registered_at) AS INTEGER) AS days_registered,
+           COALESCE(ts.cnt, 0) + COALESCE(ap.cnt, 0) AS tests_done,
+           (SELECT COUNT(*) FROM tests t WHERE t.created_at >= u.registered_at)
+             + (SELECT COUNT(*) FROM aplus_tests t WHERE t.created_at >= u.registered_at) AS tests_total,
+           COALESCE(att.cnt, 0) AS attendance_attended,
+           (SELECT COUNT(*) FROM attendance_sessions s WHERE s.created_at >= u.registered_at) AS attendance_total
+    FROM users u
+    LEFT JOIN (
+        SELECT s.telegram_id, COUNT(*) AS cnt
+        FROM test_submissions s
+        JOIN tests t ON t.id = s.test_id
+        JOIN users x ON x.telegram_id = s.telegram_id
+        WHERE t.created_at >= x.registered_at
+        GROUP BY s.telegram_id
+    ) ts ON ts.telegram_id = u.telegram_id
+    LEFT JOIN (
+        SELECT s.telegram_id, COUNT(*) AS cnt
+        FROM aplus_submissions s
+        JOIN aplus_tests t ON t.id = s.test_id
+        JOIN users x ON x.telegram_id = s.telegram_id
+        WHERE t.created_at >= x.registered_at
+        GROUP BY s.telegram_id
+    ) ap ON ap.telegram_id = u.telegram_id
+    LEFT JOIN (
+        SELECT r.telegram_id, COUNT(*) AS cnt
+        FROM attendance_records r
+        JOIN attendance_sessions a ON a.id = r.session_id
+        JOIN users x ON x.telegram_id = r.telegram_id
+        WHERE a.created_at >= x.registered_at
+        GROUP BY r.telegram_id
+    ) att ON att.telegram_id = u.telegram_id
+    WHERE u.is_registered = 1 {extra_where}
+"""
+
+# "Eng yomonlar birinchi": ro'yxatdan o'tganidan beri eng ko'p vazifa qilmaganlar
+# tepada, ko'p topshirgan pastda. Teng bo'lsa - avval ro'yxatdan o'tgani eskirog'i,
+# keyin davomatdan ko'proq qolgani. telegram_id oxirida - sahifalashda ("Yana
+# ko'rish") tartib barqaror bo'lishi uchun.
+_PANEL_ORDER_WORST = "tests_missed DESC, registered_at ASC, attendance_missed DESC, telegram_id ASC"
+_PANEL_ORDER_NEWEST = "registered_at DESC, telegram_id ASC"
+
+
+def _panel_row_to_dict(r):
+    item = {c: r[i] for i, c in enumerate(_PANEL_COLS[:8])}
+    item.update({
+        "days_registered": r[8], "tests_done": r[9], "tests_total": r[10],
+        "attendance_attended": r[11], "attendance_total": r[12],
+        "tests_missed": r[13], "attendance_missed": r[14],
+    })
+    return item
+
+
+def _panel_where(search, absent_session_id):
+    clauses, params = [], []
+    if search:
+        clauses.append("AND LOWER(u.full_name) LIKE ?")
+        params.append(f"%{search.strip().lower()}%")
+    if absent_session_id is not None:
+        clauses.append(
+            "AND u.telegram_id NOT IN "
+            "(SELECT telegram_id FROM attendance_records WHERE session_id = ?)"
+        )
+        params.append(absent_session_id)
+    return " ".join(clauses), params
+
+
+async def get_last_attendance_session_id():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT id FROM attendance_sessions ORDER BY created_at DESC, id DESC LIMIT 1"
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+
+async def get_panel_students(search=None, absent_session_id=None, worst_first=True,
+                             limit=20, offset=0):
+    """(items, total) qaytaradi. items - lug'atlar ro'yxati."""
+    extra, params = _panel_where(search, absent_session_id)
+    inner = _PANEL_INNER.format(extra_where=extra)
+    order = _PANEL_ORDER_WORST if worst_first else _PANEL_ORDER_NEWEST
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(f"SELECT COUNT(*) FROM ({inner})", tuple(params)) as cursor:
+            total = (await cursor.fetchone())[0]
+        sql = (
+            "SELECT *, (tests_total - tests_done) AS tests_missed, "
+            "(attendance_total - attendance_attended) AS attendance_missed "
+            f"FROM ({inner}) ORDER BY {order} LIMIT ? OFFSET ?"
+        )
+        async with db.execute(sql, tuple(params) + (limit, offset)) as cursor:
+            rows = await cursor.fetchall()
+    return [_panel_row_to_dict(r) for r in rows], total
+
+
+async def get_panel_summary(last_session_id=None):
+    """Panel tepasidagi umumiy ko'rsatkichlar."""
+    inner = _PANEL_INNER.format(extra_where="")
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            f"SELECT COUNT(*), "
+            f"SUM(CASE WHEN tests_total > 0 AND tests_done = 0 THEN 1 ELSE 0 END), "
+            f"SUM(CASE WHEN tests_total > 0 AND tests_done > 0 THEN 1 ELSE 0 END) "
+            f"FROM ({inner})"
+        ) as cursor:
+            row = await cursor.fetchone()
+        students, no_homework, with_homework = row[0] or 0, row[1] or 0, row[2] or 0
+
+        absent = 0
+        if last_session_id is not None:
+            async with db.execute(
+                "SELECT COUNT(*) FROM users WHERE is_registered = 1 AND telegram_id NOT IN "
+                "(SELECT telegram_id FROM attendance_records WHERE session_id = ?)",
+                (last_session_id,),
+            ) as cursor:
+                absent = (await cursor.fetchone())[0]
+
+        async with db.execute(
+            "SELECT (SELECT COUNT(*) FROM tests) + (SELECT COUNT(*) FROM aplus_tests), "
+            "(SELECT COUNT(*) FROM attendance_sessions)"
+        ) as cursor:
+            tests_count, sessions_count = await cursor.fetchone()
+
+    return {
+        "students": students,
+        "no_homework": no_homework,
+        "with_homework": with_homework,
+        "absent_last_session": absent,
+        "tests_count": tests_count,
+        "sessions_count": sessions_count,
+    }
+
+
+async def get_panel_student(telegram_id: int):
+    """Bitta o'quvchi (panel ko'rsatkichlari bilan) yoki None."""
+    inner = _PANEL_INNER.format(extra_where="AND u.telegram_id = ?")
+    sql = (
+        "SELECT *, (tests_total - tests_done) AS tests_missed, "
+        f"(attendance_total - attendance_attended) AS attendance_missed FROM ({inner})"
+    )
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(sql, (telegram_id,)) as cursor:
+            r = await cursor.fetchone()
+    return _panel_row_to_dict(r) if r else None
+
+
+async def get_panel_student_section(telegram_id: int, section: str, limit: int, offset: int):
+    """section: 'tests' | 'aplus' | 'attendance'. (items, total) qaytaradi."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        if section == "tests":
+            count_sql, count_args = (
+                "SELECT COUNT(*) FROM test_submissions WHERE telegram_id = ?", (telegram_id,))
+            sql = (
+                "SELECT COALESCE(t.name, t.code) AS name, ts.score, t.total_questions AS total, "
+                "ts.submitted_at AS at FROM test_submissions ts JOIN tests t ON t.id = ts.test_id "
+                "WHERE ts.telegram_id = ? ORDER BY ts.submitted_at DESC LIMIT ? OFFSET ?")
+            cols = ("name", "score", "total", "at")
+        elif section == "aplus":
+            count_sql, count_args = (
+                "SELECT COUNT(*) FROM aplus_submissions WHERE telegram_id = ?", (telegram_id,))
+            sql = (
+                "SELECT COALESCE(t.name, t.code) AS name, s.score, t.question_count AS total, "
+                "s.submitted_at AS at FROM aplus_submissions s JOIN aplus_tests t ON t.id = s.test_id "
+                "WHERE s.telegram_id = ? ORDER BY s.submitted_at DESC LIMIT ? OFFSET ?")
+            cols = ("name", "score", "total", "at")
+        else:
+            since = "(SELECT registered_at FROM users WHERE telegram_id = ?)"
+            count_sql, count_args = (
+                f"SELECT COUNT(*) FROM attendance_sessions WHERE created_at >= {since}", (telegram_id,))
+            sql = (
+                "SELECT s.code AS name, CASE WHEN r.telegram_id IS NULL THEN 0 ELSE 1 END AS attended, "
+                "s.created_at AS at FROM attendance_sessions s "
+                "LEFT JOIN attendance_records r ON r.session_id = s.id AND r.telegram_id = ? "
+                f"WHERE s.created_at >= {since} "
+                "ORDER BY s.created_at DESC, s.id DESC LIMIT ? OFFSET ?")
+            cols = ("name", "attended", "at")
+        async with db.execute(count_sql, count_args) as cursor:
+            total = (await cursor.fetchone())[0]
+        args = (telegram_id, telegram_id, limit, offset) if section == "attendance" \
+            else (telegram_id, limit, offset)
+        async with db.execute(sql, args) as cursor:
+            rows = await cursor.fetchall()
+    return [{c: r[i] for i, c in enumerate(cols)} for r in rows], total
+
+
+async def _ensure_admin_notes(db):
+    await db.execute(
+        "CREATE TABLE IF NOT EXISTS admin_notes ("
+        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "telegram_id INTEGER NOT NULL, "
+        "author_name TEXT NOT NULL, "
+        "note TEXT NOT NULL, "
+        "created_at TEXT NOT NULL)"
+    )
+
+
+async def get_panel_notes(telegram_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_admin_notes(db)
+        async with db.execute(
+            "SELECT id, author_name, note, created_at FROM admin_notes "
+            "WHERE telegram_id = ? ORDER BY created_at DESC, id DESC",
+            (telegram_id,),
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [{"id": r[0], "author_name": r[1], "note": r[2], "created_at": r[3]} for r in rows]
+
+
+async def add_panel_note(telegram_id: int, author_name: str, note: str):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await _ensure_admin_notes(db)
+        await db.execute(
+            "INSERT INTO admin_notes (telegram_id, author_name, note, created_at) "
+            "VALUES (?, ?, ?, datetime('now'))",
+            (telegram_id, author_name, note),
+        )
+        await db.commit()

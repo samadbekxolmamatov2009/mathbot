@@ -1060,6 +1060,130 @@ async def _on_cleanup(app: web.Application):
         task.cancel()
 
 
+# ---------- Admin panel (Mini App) ----------
+
+def _panel_user(request: web.Request):
+    """Panel API'lariga faqat Admin/Boss kira oladi (initData sarlavhada keladi).
+    (user, None) yoki (None, xato javobi) qaytaradi."""
+    user = verify_init_data(request.headers.get("X-Init-Data", ""))
+    if not user:
+        return None, web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return None, web.json_response({"error": "not_admin"}, status=403)
+    return user, None
+
+
+def _course_label(item: dict) -> dict:
+    course = item.get("course")
+    if course in config.COURSES:
+        item["course"] = config.COURSES[course]["name"]
+    return item
+
+
+def _int_param(request: web.Request, name: str, default: int, lo: int, hi: int) -> int:
+    try:
+        value = int(request.query.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return max(lo, min(hi, value))
+
+
+async def panel_summary_handler(request: web.Request):
+    _, err = _panel_user(request)
+    if err:
+        return err
+    last_session_id = await db.get_last_attendance_session_id()
+    return web.json_response(await db.get_panel_summary(last_session_id))
+
+
+async def panel_students_handler(request: web.Request):
+    _, err = _panel_user(request)
+    if err:
+        return err
+
+    absent_session_id = None
+    if request.query.get("absent_last") == "1":
+        absent_session_id = await db.get_last_attendance_session_id()
+        if absent_session_id is None:
+            # Hali birorta ham davomat sessiyasi bo'lmagan
+            return web.json_response({"items": [], "total": 0, "no_session": True})
+
+    items, total = await db.get_panel_students(
+        search=(request.query.get("search") or "").strip() or None,
+        absent_session_id=absent_session_id,
+        worst_first=request.query.get("sort", "worst") != "newest",
+        limit=_int_param(request, "limit", 20, 1, 50),
+        offset=_int_param(request, "offset", 0, 0, 1_000_000),
+    )
+    return web.json_response({"items": [_course_label(i) for i in items], "total": total})
+
+
+async def panel_student_handler(request: web.Request):
+    _, err = _panel_user(request)
+    if err:
+        return err
+    try:
+        telegram_id = int(request.match_info["id"])
+    except ValueError:
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    student = await db.get_panel_student(telegram_id)
+    if not student:
+        return web.json_response({"error": "not_found"}, status=404)
+
+    result = {"student": _course_label(student), "notes": await db.get_panel_notes(telegram_id)}
+    for section in ("tests", "aplus", "attendance"):
+        items, total = await db.get_panel_student_section(telegram_id, section, 6, 0)
+        result[section] = {"items": items, "total": total}
+    return web.json_response(result)
+
+
+async def panel_student_section_handler(request: web.Request):
+    _, err = _panel_user(request)
+    if err:
+        return err
+    section = request.match_info["section"]
+    if section not in ("tests", "aplus", "attendance"):
+        return web.json_response({"error": "not_found"}, status=404)
+    try:
+        telegram_id = int(request.match_info["id"])
+    except ValueError:
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    items, total = await db.get_panel_student_section(
+        telegram_id,
+        section,
+        _int_param(request, "limit", 10, 1, 50),
+        _int_param(request, "offset", 0, 0, 1_000_000),
+    )
+    return web.json_response({"items": items, "total": total})
+
+
+async def panel_add_note_handler(request: web.Request):
+    user, err = _panel_user(request)
+    if err:
+        return err
+    try:
+        telegram_id = int(request.match_info["id"])
+        body = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    note = str(body.get("note", "")).strip()
+    if not note:
+        return web.json_response({"error": "empty_note"}, status=400)
+    if len(note) > 1000:
+        return web.json_response({"error": "note_too_long"}, status=400)
+    if not await db.get_panel_student(telegram_id):
+        return web.json_response({"error": "not_found"}, status=404)
+
+    author = " ".join(
+        p for p in (user.get("first_name"), user.get("last_name")) if p
+    ) or user.get("username") or f"ID {user['id']}"
+    await db.add_panel_note(telegram_id, author, note)
+    return web.json_response({"notes": await db.get_panel_notes(telegram_id)})
+
+
 def create_app() -> web.Application:
     app = web.Application(middlewares=[cors_middleware, no_cache_middleware])
     app.on_startup.append(_on_startup)
@@ -1085,5 +1209,10 @@ def create_app() -> web.Application:
     app.router.add_post("/api/aplus/test_by_id/{id}/update", aplus_update_test_handler)
     app.router.add_get("/api/aplus/test/{code}/status", aplus_test_status_handler)
     app.router.add_post("/api/aplus/test/{code}/submit", aplus_submit_handler)
+    app.router.add_get("/api/panel/summary", panel_summary_handler)
+    app.router.add_get("/api/panel/students", panel_students_handler)
+    app.router.add_get("/api/panel/student/{id}", panel_student_handler)
+    app.router.add_get("/api/panel/student/{id}/{section}", panel_student_section_handler)
+    app.router.add_post("/api/panel/student/{id}/notes", panel_add_note_handler)
     app.router.add_static("/", STATIC_DIR, show_index=False)
     return app

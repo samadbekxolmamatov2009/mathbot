@@ -7,6 +7,7 @@ from locations import REGIONS
 # chetlab o'tishi kerak - aks holda admin/foydalanuvchi menyu tugmasini bossa,
 # u "noto'g'ri qiymat" xatoligi sifatida qabul qilinib, navigatsiya buziladi.
 ADMIN_MENU_TEXTS = {
+    "🖥 Admin panel",
     "📊 Statistika",
     "👥 Foydalanuvchilar",
     "🗑 Foydalanuvchini o'chirish",
@@ -108,6 +109,9 @@ def admin_menu_keyboard():
     from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
     return ReplyKeyboardMarkup(
         keyboard=[
+            [
+                KeyboardButton(text="🖥 Admin panel"),
+            ],
             [
                 KeyboardButton(text="📊 Statistika"),
                 KeyboardButton(text="👥 Foydalanuvchilar"),

@@ -388,6 +388,32 @@ async def cancel_broadcast(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
+# ---------- Admin / Boss: Admin panel (Mini App) ----------
+
+@router.message(F.text == "🖥 Admin panel")
+async def open_admin_panel_app(message: Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🖥 Admin panelni ochish",
+                    web_app=WebAppInfo(url=f"{WEBAPP_BASE}/panel.html?t={int(time.time())}"),
+                )
+            ]
+        ]
+    )
+    await message.answer(
+        "🖥 <b>Admin panel</b>\n"
+        "O'quvchilar, vazifa va davomat holati — bir joyda. "
+        "Darsga kelmagan va vazifa qilmaganlarni birinchi ko'rib, qo'ng'iroq qilib chiqishingiz mumkin.",
+        reply_markup=kb,
+        parse_mode="HTML",
+    )
+
+
 # ---------- Admin: sozlamalar (haftalik xabar rejasi) ----------
 
 @router.message(F.text == "⚙️ Sozlamalar")
