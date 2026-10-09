@@ -105,13 +105,15 @@ def phone_request_keyboard():
     )
 
 
-def admin_menu_keyboard():
+def admin_menu_keyboard(user_id=None, force_panel=False):
+    """user_id berilsa, "🖥 Admin panel" tugmasi faqat unga ruxsat bo'lsa chiqadi
+    (config.can_use_panel); berilmasa - faqat PANEL_FOR_ADMINS yoqilgan bo'lsa."""
     from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+    from config import PANEL_FOR_ADMINS, can_use_panel
+    show_panel = force_panel or (can_use_panel(user_id) if user_id is not None else PANEL_FOR_ADMINS)
+    panel_row = [[KeyboardButton(text="🖥 Admin panel")]] if show_panel else []
     return ReplyKeyboardMarkup(
-        keyboard=[
-            [
-                KeyboardButton(text="🖥 Admin panel"),
-            ],
+        keyboard=panel_row + [
             [
                 KeyboardButton(text="📊 Statistika"),
                 KeyboardButton(text="👥 Foydalanuvchilar"),
@@ -149,7 +151,7 @@ def boss_menu_keyboard():
     """Faqat Boss'ning shaxsiy chatida ko'rsatiladigan menyu - admin tugmalari
     + Boss'ga xos qo'shimcha tugmalar (boshqa hech kim buni ko'rmaydi)."""
     from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
-    base = admin_menu_keyboard()
+    base = admin_menu_keyboard(force_panel=True)
     return ReplyKeyboardMarkup(
         keyboard=base.keyboard + [
             [

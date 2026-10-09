@@ -22,7 +22,7 @@ from aiohttp import web
 import config
 import database as db
 from answer_check import answers_equivalent
-from config import ALLOWED_ORIGINS, BOT_TOKEN, is_admin
+from config import ALLOWED_ORIGINS, BOT_TOKEN, can_use_panel, is_admin
 from quiz_structure import all_questions, options_for, DEFAULT_TOTAL_QUESTIONS
 from timezone_utils import now_tashkent
 
@@ -1063,12 +1063,13 @@ async def _on_cleanup(app: web.Application):
 # ---------- Admin panel (Mini App) ----------
 
 def _panel_user(request: web.Request):
-    """Panel API'lariga faqat Admin/Boss kira oladi (initData sarlavhada keladi).
+    """Panel API'lariga faqat ruxsati borlar kira oladi (hozircha faqat Boss;
+    adminlarga ochish: PANEL_FOR_ADMINS=1). initData sarlavhada keladi.
     (user, None) yoki (None, xato javobi) qaytaradi."""
     user = verify_init_data(request.headers.get("X-Init-Data", ""))
     if not user:
         return None, web.json_response({"error": "invalid_init_data"}, status=401)
-    if not is_admin(user["id"]):
+    if not can_use_panel(user["id"]):
         return None, web.json_response({"error": "not_admin"}, status=403)
     return user, None
 
