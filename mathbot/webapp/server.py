@@ -17,6 +17,7 @@ import time
 from datetime import datetime
 from urllib.parse import parse_qsl
 
+import aiohttp
 from aiohttp import web
 
 import config
@@ -1185,6 +1186,69 @@ async def panel_add_note_handler(request: web.Request):
     return web.json_response({"notes": await db.get_panel_notes(telegram_id)})
 
 
+PANEL_MESSAGE_MAX = 3500
+_panel_message_log: dict[int, list[float]] = {}
+
+
+def _panel_message_rate_ok(admin_id: int, limit: int = 30, window: float = 60.0) -> bool:
+    """Bitta adminga daqiqasiga 30 tagacha xabar (tasodifan ko'p bosib yuborishdan himoya)."""
+    now = time.monotonic()
+    recent = [t for t in _panel_message_log.get(admin_id, []) if now - t < window]
+    if len(recent) >= limit:
+        _panel_message_log[admin_id] = recent
+        return False
+    recent.append(now)
+    _panel_message_log[admin_id] = recent
+    return True
+
+
+async def panel_send_message_handler(request: web.Request):
+    """Bitta o'quvchiga bot nomidan xabar yuboradi (faqat ID bo'yicha - hammaga emas)."""
+    user, err = _panel_user(request)
+    if err:
+        return err
+    try:
+        telegram_id = int(request.match_info["id"])
+        body = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        return web.json_response({"error": "bad_request"}, status=400)
+
+    text = str(body.get("text", "")).strip()
+    if not text:
+        return web.json_response({"error": "empty_message"}, status=400)
+    if len(text) > PANEL_MESSAGE_MAX:
+        return web.json_response({"error": "message_too_long"}, status=400)
+    if not await db.get_panel_student(telegram_id):
+        return web.json_response({"error": "not_found"}, status=404)
+    if not _panel_message_rate_ok(user["id"]):
+        return web.json_response({"error": "too_many"}, status=429)
+
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+            async with session.post(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+                json={"chat_id": telegram_id, "text": f"📩 Admindan xabar:\n\n{text}"},
+            ) as resp:
+                result = await resp.json(content_type=None)
+    except (aiohttp.ClientError, asyncio.TimeoutError):
+        return web.json_response({"error": "telegram_unreachable"}, status=502)
+
+    if not result.get("ok"):
+        description = str(result.get("description", "")).lower()
+        if "blocked" in description or "deactivated" in description:
+            return web.json_response({"error": "blocked"}, status=409)
+        if "chat not found" in description:
+            return web.json_response({"error": "chat_not_found"}, status=409)
+        log.warning("Panel xabari yuborilmadi (%s): %s", telegram_id, result)
+        return web.json_response({"error": "send_failed"}, status=502)
+
+    author = " ".join(
+        p for p in (user.get("first_name"), user.get("last_name")) if p
+    ) or user.get("username") or f"ID {user['id']}"
+    await db.add_panel_note(telegram_id, author, f"💬 Botdan xabar yuborildi:\n{text}")
+    return web.json_response({"notes": await db.get_panel_notes(telegram_id)})
+
+
 def create_app() -> web.Application:
     app = web.Application(middlewares=[cors_middleware, no_cache_middleware])
     app.on_startup.append(_on_startup)
@@ -1215,5 +1279,6 @@ def create_app() -> web.Application:
     app.router.add_get("/api/panel/student/{id}", panel_student_handler)
     app.router.add_get("/api/panel/student/{id}/{section}", panel_student_section_handler)
     app.router.add_post("/api/panel/student/{id}/notes", panel_add_note_handler)
+    app.router.add_post("/api/panel/student/{id}/message", panel_send_message_handler)
     app.router.add_static("/", STATIC_DIR, show_index=False)
     return app
