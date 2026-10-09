@@ -15,7 +15,7 @@ from aiogram.types import (
 )
 
 import database as db
-from config import ADMIN_IDS, BOSS_IDS, COURSES, WEBAPP_URL, is_admin
+from config import ADMIN_IDS, BOSS_IDS, COURSES, WEBAPP_URL, can_use_panel, is_admin
 from states import Broadcast
 from keyboards import admin_menu_keyboard, NAV_BUTTON_TEXTS
 from handlers.boss import notify_boss
@@ -125,7 +125,7 @@ async def cmd_help(message: Message):
         "ℹ️ Eslatma: yangi test/A+/maxsus topshiriq faollashtirilganda, barcha "
         "ro'yxatdan o'tgan o'quvchilarga avtomatik xabar boradi."
     )
-    await message.answer(text, parse_mode="HTML", reply_markup=admin_menu_keyboard())
+    await message.answer(text, parse_mode="HTML", reply_markup=admin_menu_keyboard(message.from_user.id))
 
 
 @router.message(Command("stats"))
@@ -392,7 +392,14 @@ async def cancel_broadcast(callback: CallbackQuery, state: FSMContext):
 
 @router.message(F.text == "🖥 Admin panel")
 async def open_admin_panel_app(message: Message):
-    if not is_admin(message.from_user.id):
+    if not can_use_panel(message.from_user.id):
+        # Panel hozircha faqat Boss uchun. Eski menyuda tugma qolib ketgan oddiy
+        # admin bosib yuborsa - menyusi tugmasiz holatda yangilanadi.
+        if is_admin(message.from_user.id):
+            await message.answer(
+                "Menyu yangilandi \U0001F447",
+                reply_markup=admin_menu_keyboard(message.from_user.id),
+            )
         return
 
     kb = InlineKeyboardMarkup(

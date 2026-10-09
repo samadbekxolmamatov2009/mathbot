@@ -91,7 +91,7 @@ async def handle_web_app_data(message: Message):
             f"{_regrade_line(payload)}"
             "O'quvchilar \"📝 Test yuborish\" tugmasi orqali mavzuni ro'yxatdan tanlab ishlay oladi.",
             parse_mode="HTML",
-            reply_markup=admin_menu_keyboard(),
+            reply_markup=admin_menu_keyboard(message.from_user.id),
         )
     elif payload.get("type") in ("aplus_test_created", "aplus_test_updated"):
         code = payload.get("code", "?")
@@ -104,7 +104,7 @@ async def handle_web_app_data(message: Message):
             f"{_regrade_line(payload)}"
             "O'quvchilar \"➕ A+ ishlash\" tugmasi orqali mavzuni ro'yxatdan tanlab ishlay oladi.",
             parse_mode="HTML",
-            reply_markup=admin_menu_keyboard(),
+            reply_markup=admin_menu_keyboard(message.from_user.id),
         )
 
 

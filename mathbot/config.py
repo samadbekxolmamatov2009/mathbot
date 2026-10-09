@@ -35,6 +35,16 @@ def is_boss(user_id: int) -> bool:
     return user_id in BOSS_IDS
 
 
+# "🖥 Admin panel" Mini App'i hozircha FAQAT Boss'larga ko'rinadi va ishlaydi.
+# Oddiy adminlarga ochish uchun hosting sozlamalariga PANEL_FOR_ADMINS=1 qo'ying
+# (kod o'zgartirish shart emas) va botni qayta ishga tushiring.
+PANEL_FOR_ADMINS = os.getenv("PANEL_FOR_ADMINS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def can_use_panel(user_id) -> bool:
+    return is_boss(user_id) or (PANEL_FOR_ADMINS and is_admin(user_id))
+
+
 DB_PATH = "mathbot.db"
 
 # Turso (libSQL) - tarmoq orqali ulaniladigan baza. Render'da botlar

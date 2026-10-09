@@ -118,7 +118,7 @@ async def cmd_start(message: Message, state: FSMContext):
         await message.answer(
             "Assalomu alaykum, Admin! \U0001F44B\n\n"
             "Quyidagi menyudan foydalaning \U0001F447",
-            reply_markup=admin_menu_keyboard(),
+            reply_markup=admin_menu_keyboard(message.from_user.id),
         )
         return
 
