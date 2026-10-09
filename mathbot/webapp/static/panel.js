@@ -6,7 +6,6 @@
   var PAGE = 20;
 
   // ---------- Telegram: tayyorlash, to'liq ekran, mavzu ----------
-  var MOBILE = !!(tg && /^(android|android_x|ios)$/.test(tg.platform || ""));
 
   function applyTheme() {
     var dark = tg && tg.colorScheme
@@ -30,6 +29,12 @@
     fsBtn.hidden = !(supports("8.0") && tg.requestFullscreen);
   }
 
+  function enterFullscreen() {
+    try {
+      if (supports("8.0") && tg.requestFullscreen && !tg.isFullscreen) tg.requestFullscreen();
+    } catch (e) {}
+  }
+
   function toggleFullscreen() {
     if (!tg) return;
     try { tg.isFullscreen ? tg.exitFullscreen() : tg.requestFullscreen(); } catch (e) {}
@@ -40,10 +45,14 @@
     tg.expand();                                   // butun balandlikka yoyadi
     applyTheme();
     try { supports("7.7") && tg.disableVerticalSwipes(); } catch (e) {}   // aylantirganda tasodifan yopilmasin
-    // Telefonlarda ilova ochilishi bilan TO'LIQ EKRAN (Telegram 8.0+). Eski versiyalarda expand() yetarli.
-    if (MOBILE && supports("8.0") && tg.requestFullscreen && !tg.isFullscreen) {
-      try { tg.requestFullscreen(); } catch (e) {}
-    }
+    // Ilova ochilishi bilan TO'LIQ EKRAN (Telegram 8.0+; barcha qurilmalarda). Eski versiyada expand() yetarli.
+    enterFullscreen();
+    // Ba'zi mijozlar birinchi chaqiruvni rad etadi - qisqa pauzadan keyin va birinchi tegishda qayta uriniladi.
+    setTimeout(enterFullscreen, 400);
+    ["pointerdown", "keydown"].forEach(function (ev) {
+      window.addEventListener(ev, enterFullscreen, { once: true, passive: true });
+    });
+    tg.onEvent("fullscreenChanged", syncFullscreenBtn);
     syncFullscreenBtn();
     tg.onEvent("themeChanged", applyTheme);
     tg.onEvent("viewportChanged", function () { /* CSS o'zgaruvchilar avtomatik yangilanadi */ });
