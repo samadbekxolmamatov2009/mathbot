@@ -1065,14 +1065,39 @@ async def update_aplus_submission_scores(updates: list):
 
 # ---------- Tangalar (davomat + test ballaridan hisoblanadi) ----------
 
+def _now_deadline_str() -> str:
+    """Test muddatlari (end_time) bilan solishtirish uchun hozirgi Toshkent vaqti
+    ("YYYY-MM-DDTHH:MM" - bazada saqlangan format bilan bir xil)."""
+    from timezone_utils import now_tashkent
+    return now_tashkent().strftime("%Y-%m-%dT%H:%M")
+
+
+def _streak_flag(submitted: bool, end_time, now_str: str):
+    """Bitta test streak uchun qanday hisoblanishi:
+    True  - topshirilgan (streak davom etadi, +1);
+    None  - hali topshirilmagan, LEKIN muddati hali tugamagan: hozircha na
+            streak'ni uzadi, na oshiradi (o'quvchi hali ulgurishi mumkin -
+            masalan 12-vazifani 11-vazifadan oldin ishlashi);
+    False - muddati o'tib ketgan va topshirilmagan: streak uziladi."""
+    if submitted:
+        return True
+    if end_time and str(end_time) > now_str:
+        return None
+    return False
+
+
 def _streak_bonus(flags) -> int:
-    """flags: eng eskisidan boshlab ketma-ket ro'y bergan/bermagan (bool)
-    ro'yxati. Ketma-ket "ha" bo'lgan har bir element oldingisidan 1 ball
-    ko'p beradi (1, 2, 3, ...); bitta marta "yo'q" bo'lsa, streak yana
-    1 dan boshlanadi."""
+    """flags: eng eskisidan boshlab har bir test uchun True / False / None
+    (qarang: _streak_flag). Ketma-ket "True" bo'lgan har bir element oldingisidan
+    1 ball ko'p beradi (1, 2, 3, ...); muddati o'tgan topshirilmagan test (False)
+    bo'lsa, streak yana 1 dan boshlanadi. None (muddati hali tugamagan, hali
+    topshirilmagan) o'tkazib yuboriladi - streak'ni uzmaydi ham, oshirmaydi ham,
+    shuning uchun tartibsiz ishlash (12-ni 11-dan oldin) ballni kamaytirib yubormaydi."""
     streak = 0
     total = 0
     for done in flags:
+        if done is None:
+            continue
         if done:
             streak += 1
             total += streak
@@ -1098,9 +1123,9 @@ async def get_user_coins(telegram_id: int) -> dict:
             attendance_count = (await cursor.fetchone())[0]
 
         async with db.execute(
-            "SELECT id FROM tests ORDER BY id ASC"
+            "SELECT id, end_time FROM tests ORDER BY id ASC"
         ) as cursor:
-            test_ids = [row[0] for row in await cursor.fetchall()]
+            test_rows = [(row[0], row[1]) for row in await cursor.fetchall()]
 
         async with db.execute(
             "SELECT test_id FROM test_submissions WHERE telegram_id = ?",
@@ -1122,9 +1147,9 @@ async def get_user_coins(telegram_id: int) -> dict:
 
         # ---- A+ testlar ----
         async with db.execute(
-            "SELECT id FROM aplus_tests ORDER BY id ASC"
+            "SELECT id, end_time FROM aplus_tests ORDER BY id ASC"
         ) as cursor:
-            aplus_test_ids = [row[0] for row in await cursor.fetchall()]
+            aplus_rows = [(row[0], row[1]) for row in await cursor.fetchall()]
 
         async with db.execute(
             "SELECT test_id FROM aplus_submissions WHERE telegram_id = ?",
@@ -1139,8 +1164,13 @@ async def get_user_coins(telegram_id: int) -> dict:
             aplus_coins = (await cursor.fetchone())[0]
 
     attendance_coins = attendance_count
-    test_streak_coins = _streak_bonus([tid in submitted_test_ids for tid in test_ids])
-    aplus_streak_coins = _streak_bonus([tid in submitted_aplus_ids for tid in aplus_test_ids])
+    now_str = _now_deadline_str()
+    test_streak_coins = _streak_bonus(
+        [_streak_flag(tid in submitted_test_ids, end, now_str) for tid, end in test_rows]
+    )
+    aplus_streak_coins = _streak_bonus(
+        [_streak_flag(tid in submitted_aplus_ids, end, now_str) for tid, end in aplus_rows]
+    )
 
     return {
         "attendance_count": attendance_count,
@@ -1169,9 +1199,9 @@ async def get_leaderboard(limit: int = 50):
             attendance_counts = {row["telegram_id"]: row["cnt"] for row in await cursor.fetchall()}
 
         async with db.execute(
-            "SELECT id FROM tests ORDER BY id ASC"
+            "SELECT id, end_time FROM tests ORDER BY id ASC"
         ) as cursor:
-            test_ids = [row[0] for row in await cursor.fetchall()]
+            test_rows = [(row[0], row[1]) for row in await cursor.fetchall()]
 
         async with db.execute(
             "SELECT test_id, telegram_id FROM test_submissions"
@@ -1190,9 +1220,9 @@ async def get_leaderboard(limit: int = 50):
 
         # ---- A+ testlar ----
         async with db.execute(
-            "SELECT id FROM aplus_tests ORDER BY id ASC"
+            "SELECT id, end_time FROM aplus_tests ORDER BY id ASC"
         ) as cursor:
-            aplus_test_ids = [row[0] for row in await cursor.fetchall()]
+            aplus_rows = [(row[0], row[1]) for row in await cursor.fetchall()]
 
         async with db.execute(
             "SELECT test_id, telegram_id FROM aplus_submissions"
@@ -1204,12 +1234,17 @@ async def get_leaderboard(limit: int = 50):
         ) as cursor:
             aplus_scores = {row["telegram_id"]: row["total_score"] for row in await cursor.fetchall()}
 
+    now_str = _now_deadline_str()
     leaderboard = []
     for u in users:
         tid = u["telegram_id"]
         attendance_coins = attendance_counts.get(tid, 0)
-        test_streak_coins = _streak_bonus([(test_id, tid) in submitted_set for test_id in test_ids])
-        aplus_streak_coins = _streak_bonus([(test_id, tid) in aplus_submitted_set for test_id in aplus_test_ids])
+        test_streak_coins = _streak_bonus(
+            [_streak_flag((test_id, tid) in submitted_set, end, now_str) for test_id, end in test_rows]
+        )
+        aplus_streak_coins = _streak_bonus(
+            [_streak_flag((test_id, tid) in aplus_submitted_set, end, now_str) for test_id, end in aplus_rows]
+        )
         coins = (
             attendance_coins + test_scores.get(tid, 0) + test_streak_coins
             + (aplus_scores.get(tid, 0) or 0) + aplus_streak_coins
@@ -1646,3 +1681,123 @@ async def add_panel_note(telegram_id: int, author_name: str, note: str):
             (telegram_id, author_name, note),
         )
         await db.commit()
+
+
+# ---------- "Hisobot olish" tugmalari (davomat / testlar) ----------
+# Avtomatik hisobotlar (har bir davomat/test muddati tugaganda) o'rniga Boss va
+# adminlar xohlagan payti tugma bosib, OXIRGI olgan hisobotidan keyingi
+# yakunlangan davomat/testlarni oladi. Har kim uchun alohida "belgi" (kursor)
+# saqlanadi - Boss hisobot olsa, adminniki o'zgarmaydi. Kursor - oxirgi hisobotga
+# kirgan elementning id'si. Birinchi hisobot - bu funksiya ishga tushgandan KEYINGI
+# ma'lumotlar (tarix qo'shib yuborilmaydi), buni "baza chizig'i" (baseline) belgilaydi.
+
+REPORT_KINDS = ("attendance", "tests", "aplus")
+
+
+async def _report_items(kind: str):
+    """kind bo'yicha barcha elementlar (id o'sish tartibida) va yakunlangani-yo'qligi."""
+    now_str = _now_deadline_str()
+    async with aiosqlite.connect(DB_PATH) as db:
+        if kind == "attendance":
+            sql = "SELECT id, code, created_at, is_active FROM attendance_sessions ORDER BY id ASC"
+        elif kind == "tests":
+            sql = "SELECT id, code, created_at, end_time, name FROM tests ORDER BY id ASC"
+        else:
+            sql = "SELECT id, code, created_at, end_time, name FROM aplus_tests ORDER BY id ASC"
+        async with db.execute(sql) as cursor:
+            rows = await cursor.fetchall()
+
+    items = []
+    for r in rows:
+        if kind == "attendance":
+            finished = not r[3]
+            items.append({"id": r[0], "code": r[1], "created_at": r[2], "name": None, "finished": finished})
+        else:
+            end = r[3]
+            finished = (not end) or str(end) <= now_str
+            items.append({"id": r[0], "code": r[1], "created_at": r[2], "name": r[4], "finished": finished})
+    return items
+
+
+async def ensure_report_baselines():
+    """Har bir tur uchun baza chizig'ini BIR MARTA belgilaydi: hozirgacha yakunlangan
+    hamma narsa "eski" hisoblanadi (hisobotga kirmaydi). Hali tugamaganlar kelgusi
+    hisobotga kiradi."""
+    for kind in REPORT_KINDS:
+        key = f"rep_base:{kind}"
+        if await get_setting(key) is not None:
+            continue
+        items = await _report_items(kind)
+        unfinished = [i["id"] for i in items if not i["finished"]]
+        if unfinished:
+            base = min(unfinished) - 1
+        else:
+            base = max((i["id"] for i in items), default=0)
+        await set_setting(key, str(base))
+
+
+async def get_report_batch(kind: str, user_id: int):
+    """(elementlar, yangi_kursor, oxirgi_hisobot_vaqti). Elementlar - kursordan keyingi
+    yakunlangan elementlar; hali tugamagan element uchragach to'xtaydi (u va undan
+    keyingilari keyingi hisobotga qoladi - shunda hech narsa tushib qolmaydi va
+    takrorlanmaydi)."""
+    await ensure_report_baselines()
+    cursor_raw = await get_setting(f"rep_cur:{kind}:{user_id}")
+    if cursor_raw is None:
+        cursor_raw = await get_setting(f"rep_base:{kind}", "0")
+    cursor_id = int(cursor_raw or 0)
+    last_at = await get_setting(f"rep_at:{kind}:{user_id}")
+
+    batch = []
+    for item in await _report_items(kind):
+        if item["id"] <= cursor_id:
+            continue
+        if not item["finished"]:
+            break
+        batch.append(item)
+    new_cursor = batch[-1]["id"] if batch else cursor_id
+    return batch, new_cursor, last_at
+
+
+async def commit_report_cursor(kind: str, user_id: int, new_cursor: int):
+    """Hisobot muvaffaqiyatli yuborilgandan KEYIN chaqiriladi."""
+    from timezone_utils import now_tashkent
+    await set_setting(f"rep_cur:{kind}:{user_id}", str(new_cursor))
+    await set_setting(f"rep_at:{kind}:{user_id}", now_tashkent().strftime("%d.%m.%Y %H:%M"))
+
+
+async def get_report_students():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            "SELECT telegram_id, full_name, registered_at FROM users "
+            "WHERE is_registered = 1 ORDER BY full_name COLLATE NOCASE ASC"
+        ) as cursor:
+            rows = await cursor.fetchall()
+    return [{"telegram_id": r[0], "full_name": r[1], "registered_at": r[2]} for r in rows]
+
+
+async def get_report_attendance_records(session_ids):
+    """{(session_id, telegram_id)} - kim qaysi sessiyada qatnashgan."""
+    if not session_ids:
+        return set()
+    marks = ",".join("?" for _ in session_ids)
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            f"SELECT session_id, telegram_id FROM attendance_records WHERE session_id IN ({marks})",
+            tuple(session_ids),
+        ) as cursor:
+            return {(r[0], r[1]) for r in await cursor.fetchall()}
+
+
+async def get_report_submission_scores(kind: str, test_ids):
+    """{(test_id, telegram_id): score} - oddiy ('tests') yoki A+ ('aplus') testlar."""
+    if not test_ids:
+        return {}
+    table = "test_submissions" if kind == "tests" else "aplus_submissions"
+    marks = ",".join("?" for _ in test_ids)
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            f"SELECT test_id, telegram_id, score FROM {table} WHERE test_id IN ({marks})",
+            tuple(test_ids),
+        ) as cursor:
+            return {(r[0], r[1]): r[2] for r in await cursor.fetchall()}
