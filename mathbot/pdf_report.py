@@ -513,6 +513,136 @@ def generate_attendance_matrix_report(
     return output_path
 
 
+def generate_tests_matrix_report(
+    output_path: str,
+    title: str,
+    test_labels,
+    rows,
+    generated_at: datetime = None,
+) -> str:
+    """Testlar jadvali (matritsa): qatorlar = o'quvchilar, ustunlar = testlar,
+    oxirgi ustun = nechta test ishlagani.
+
+    test_labels: har bir ustun uchun qisqa yorliq.
+    rows: (full_name, cells, done, total) - cells har bir test uchun
+    ("in", "27") - ishlagan (yashil, ball), ("out", "-") - ishlamagan (qizil) yoki
+    ("na", "") - test o'sha payt o'quvchi hali ro'yxatdan o'tmagan edi (kulrang).
+    """
+    generated_at = generated_at or now_tashkent()
+    date_str = generated_at.strftime("%d.%m.%Y %H:%M")
+
+    GREEN_BG = colors.HexColor("#DCF3E3")
+    RED_BG = colors.HexColor("#FBE0DC")
+    NA_BG = colors.HexColor("#E3E3E3")
+    GREEN_TEXT = colors.HexColor("#2F7D4F")
+    RED_TEXT = colors.HexColor("#B03A2E")
+    NA_TEXT = colors.HexColor("#333333")
+    STYLE = {"in": (GREEN_BG, GREEN_TEXT), "out": (RED_BG, RED_TEXT), "na": (NA_BG, NA_TEXT)}
+
+    page_w, page_h = landscape(A4)
+    margin = 30
+    name_w = 150
+    total_w = 48
+    header_h = 70
+    row_h = 16
+    title_h = 24
+
+    col_w = 30
+    max_cols = max(1, int((page_w - 2 * margin - name_w - total_w) / col_w))
+
+    c = canvas.Canvas(output_path, pagesize=landscape(A4))
+    c.setStrokeColor(BORDER)
+
+    chunks = [
+        list(range(i, min(i + max_cols, len(test_labels))))
+        for i in range(0, len(test_labels), max_cols)
+    ] or [[]]
+
+    def draw_title(chunk_idx):
+        c.setFillColor(TITLE_COLOR)
+        c.setFont("Helvetica-Bold", 15)
+        c.drawCentredString(page_w / 2, page_h - margin - 14, title)
+        c.setFillColor(SUBTITLE_COLOR)
+        c.setFont("Helvetica", 9)
+        suffix = f"  |  {chunk_idx + 1}/{len(chunks)}-qism" if len(chunks) > 1 else ""
+        c.drawCentredString(
+            page_w / 2, page_h - margin - title_h,
+            f"Sana: {date_str}  |  Testlar: {len(test_labels)}  |  Oquvchilar: {len(rows)}{suffix}",
+        )
+
+    def draw_header(y, col_indices):
+        x = margin
+        c.setFillColor(HEADER_BLUE)
+        c.rect(x, y - header_h, name_w, header_h, fill=1, stroke=1)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(x + 6, y - header_h / 2 - 3, "Talaba")
+        x += name_w
+        for idx in col_indices:
+            c.setFillColor(HEADER_BLUE)
+            c.rect(x, y - header_h, col_w, header_h, fill=1, stroke=1)
+            c.setFillColor(colors.white)
+            c.setFont("Helvetica-Bold", 6.5)
+            c.saveState()
+            c.translate(x + col_w / 2, y - header_h / 2)
+            c.rotate(90)
+            c.drawCentredString(0, -2, test_labels[idx][:22])
+            c.restoreState()
+            x += col_w
+        c.setFillColor(HEADER_GREEN)
+        c.rect(x, y - header_h, total_w, header_h, fill=1, stroke=1)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(x + total_w / 2, y - header_h / 2 - 3, "Ishladi")
+        return y - header_h
+
+    for chunk_idx, col_indices in enumerate(chunks):
+        draw_title(chunk_idx)
+        y = page_h - margin - title_h - 16
+        y = draw_header(y, col_indices)
+
+        for row_idx, (name, cells, done, total) in enumerate(rows):
+            if y - row_h < margin:
+                c.showPage()
+                c.setStrokeColor(BORDER)
+                draw_title(chunk_idx)
+                y = page_h - margin - title_h - 16
+                y = draw_header(y, col_indices)
+
+            band = ROW_ALT if row_idx % 2 == 0 else ROW_WHITE
+            x = margin
+            c.setFillColor(band)
+            c.rect(x, y - row_h, name_w, row_h, fill=1, stroke=1)
+            c.setFillColor(TEXT_DARK)
+            c.setFont("Helvetica", 7.5)
+            c.drawString(x + 6, y - row_h + 4, (name or "Noma'lum")[:30])
+            x += name_w
+
+            for idx in col_indices:
+                kind, text = cells[idx]
+                bg, fg = STYLE[kind]
+                c.setFillColor(bg)
+                c.rect(x, y - row_h, col_w, row_h, fill=1, stroke=1)
+                c.setFillColor(fg)
+                c.setFont("Helvetica-Bold", 8)
+                c.drawCentredString(x + col_w / 2, y - row_h + 4, text)
+                x += col_w
+
+            none_done = total > 0 and done == 0
+            c.setFillColor(RED_BG if none_done else band)
+            c.rect(x, y - row_h, total_w, row_h, fill=1, stroke=1)
+            c.setFillColor(RED_TEXT if none_done else TEXT_DARK)
+            c.setFont("Helvetica-Bold", 8)
+            c.drawCentredString(x + total_w / 2, y - row_h + 4, f"{done}/{total}")
+            y -= row_h
+
+        c.showPage()
+        c.setStrokeColor(BORDER)
+
+    c.save()
+    return output_path
+
+
 def generate_test_results_report(
     output_path: str,
     code: str,

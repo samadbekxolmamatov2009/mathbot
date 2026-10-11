@@ -307,24 +307,9 @@ async def _run_attendance_session(bot, session_id: int, warning_minutes: int, re
             except Exception:
                 pass
 
-    summary = await db.get_attendance_summary(session_id)
-    rows = [
-        (
-            u["full_name"] or "Noma'lum",
-            COURSES.get(u["course"], {}).get("name", u["course"] or "Noma'lum"),
-            bool(u["attended"]),
-        )
-        for u in summary
-    ]
-
-    report_path = os.path.join(tempfile.gettempdir(), f"davomat_{session_id}.pdf")
-    generate_attendance_report(report_path, rows)
-
-    for admin_id in ADMIN_IDS + BOSS_IDS:
-        try:
-            await bot.send_document(admin_id, FSInputFile(report_path))
-        except Exception:
-            pass
+    # Muddat tugagach hisobot endi adminlarga AVTOMATIK yuborilmaydi: Boss/adminlar
+    # "📋 Davomat hisoboti" tugmasi (handlers/reports.py) orqali xohlagan payti,
+    # oxirgi olgan hisobotidan keyingi barcha yakunlangan davomatlarni oladi.
 
 
 @router.startup()

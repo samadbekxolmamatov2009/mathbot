@@ -15,7 +15,7 @@ from aiogram.types import (
 )
 
 import database as db
-from config import ADMIN_IDS, BOSS_IDS, COURSES, WEBAPP_URL, can_use_panel, is_admin
+from config import ADMIN_IDS, BOSS_IDS, COURSES, WEBAPP_URL, can_use_panel, is_admin, is_boss
 from states import Broadcast
 from keyboards import admin_menu_keyboard, NAV_BUTTON_TEXTS
 from handlers.boss import notify_boss
@@ -28,8 +28,6 @@ router.callback_query.filter(F.message.chat.type == "private")
 
 
 ADMIN_COMMANDS = [
-    BotCommand(command="stats", description="📊 Statistika"),
-    BotCommand(command="users", description="👥 Foydalanuvchilar ro'yxati"),
     BotCommand(command="delete", description="🗑 Foydalanuvchini o'chirish"),
     BotCommand(command="admins", description="👮 Adminlar ro'yxati"),
     BotCommand(command="help", description="ℹ️ Yordam"),
@@ -40,7 +38,10 @@ ADMIN_COMMANDS = [
 # (BotCommandScopeChat) o'rnatiladi, shuning uchun boshqa hech kim - hatto
 # oddiy adminlar ham - buni ko'ra olmaydi (Telegram bot menyusi har bir
 # chat uchun alohida, boshqalarga umuman ko'rinmaydi).
-BOSS_COMMANDS = ADMIN_COMMANDS + [
+BOSS_COMMANDS = [
+    BotCommand(command="stats", description="📊 Statistika"),
+    BotCommand(command="users", description="👥 Foydalanuvchilar ro'yxati"),
+] + ADMIN_COMMANDS + [
     BotCommand(command="boss_add", description="➕ Admin qo'shish"),
     BotCommand(command="boss_remove", description="➖ Adminni olib tashlash"),
     BotCommand(command="boss_score", description="⚖️ O'quvchi ballini o'zgartirish"),
@@ -107,10 +108,16 @@ async def cmd_help(message: Message):
     if not is_admin(message.from_user.id):
         return
 
-    text = (
-        "🛠 <b>Admin buyruqlari</b>\n\n"
+    boss_lines = (
         "📊 Statistika — ro'yxatdan o'tganlar statistikasi\n"
         "👥 Foydalanuvchilar — barcha foydalanuvchilar ro'yxati (oxirgi 20 tasi)\n"
+        if is_boss(message.from_user.id) else ""
+    )
+    text = (
+        "🛠 <b>Admin buyruqlari</b>\n\n"
+        "📋 Davomat hisoboti — oxirgi hisobotdan keyingi yakunlangan davomatlar (PDF jadval)\n"
+        "🧾 Test hisoboti — oxirgi hisobotdan keyingi muddati tugagan testlar (PDF jadval)\n"
+        + boss_lines +
         "🗑 Foydalanuvchini o'chirish — /delete &lt;telegram_id&gt;\n"
         "👮 Adminlar — adminlar ro'yxati\n"
         "📅 Davomat — davomat olish/hisobot\n"
@@ -131,7 +138,7 @@ async def cmd_help(message: Message):
 @router.message(Command("stats"))
 @router.message(F.text == "📊 Statistika")
 async def cmd_stats(message: Message):
-    if not is_admin(message.from_user.id):
+    if not is_boss(message.from_user.id):
         return
 
     rows = await db.count_users_by_course()
@@ -152,7 +159,7 @@ async def cmd_stats(message: Message):
 @router.message(Command("users"))
 @router.message(F.text == "👥 Foydalanuvchilar")
 async def cmd_users(message: Message):
-    if not is_admin(message.from_user.id):
+    if not is_boss(message.from_user.id):
         return
 
     users = await db.get_all_users()
