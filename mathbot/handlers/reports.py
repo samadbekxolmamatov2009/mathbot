@@ -11,7 +11,7 @@ import logging
 import os
 import tempfile
 from datetime import datetime, timedelta
-from html import escape
+from html import escape as _html_escape
 
 from aiogram import F, Router
 from aiogram.types import FSInputFile, Message
@@ -19,6 +19,11 @@ from aiogram.types import FSInputFile, Message
 import database as db
 from config import is_admin
 from pdf_report import generate_attendance_matrix_report, generate_tests_matrix_report
+
+def escape(text) -> str:
+    """Telegram HTML uchun: faqat < > & almashtiriladi (apostrof/qo'shtirnoq o'z holicha)."""
+    return _html_escape(str(text), quote=False)
+
 
 router = Router()
 router.message.filter(F.chat.type == "private")
