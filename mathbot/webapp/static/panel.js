@@ -434,16 +434,18 @@
              : '<span class="act disabled">' + ICON.call + "Raqam yo'q</span>") +
         '<button class="act" type="button" id="actTg">' + ICON.tg + "Telegram</button>" +
         '<button class="act" type="button" id="actCopy"' + (tel ? "" : " disabled") + ">" + ICON.copy + "Nusxalash</button>" +
-        '<button class="act act-wide act-msg" type="button" id="actMsg">' + ICON.msg + "Botdan xabar yuborish</button>" +
+        (current.data.can_message
+          ? '<button class="act act-wide act-msg" type="button" id="actMsg">' + ICON.msg + "Botdan xabar yuborish</button>"
+          : "") +
       "</div>" +
-      '<div class="composer" id="composer" hidden>' +
+      (current.data.can_message ? '<div class="composer" id="composer" hidden>' +
         '<div class="composer-title">💬 Xabar: <b>' + esc(s.full_name || "O'quvchi") + "</b></div>" +
         '<p class="composer-hint">Xabar faqat shu o\'quvchiga, bot nomidan boradi. Raqami Telegram\'niki bo\'lmasa ham yetib boradi.</p>' +
         '<textarea id="msgText" maxlength="3500" placeholder="Masalan: Assalomu alaykum, nega darsga kelmayapsiz?"></textarea>' +
         '<p class="note-error" id="msgError" hidden></p>' +
         '<div class="composer-row"><button class="btn btn-soft" id="msgCancel" type="button">Bekor qilish</button>' +
         '<button class="btn btn-primary" id="msgSend" type="button">Yuborish</button></div>' +
-      "</div>" +
+      "</div>" : "") +
 
       '<div class="kpis">' +
         '<div class="kpi' + (s.tests_total && !s.tests_done ? " is-bad" : "") + '"><span>Vazifa</span><b>' + s.tests_done + " <small>/ " + s.tests_total + "</small></b></div>" +
@@ -476,15 +478,17 @@
         window.location.href = url;
       } catch (e) { toast("Telegram ochilmadi — raqamni nusxalab qidiring"); }
     });
-    $("actMsg").addEventListener("click", function () {
-      haptic();
-      var box = $("composer");
-      box.hidden = !box.hidden;
-      if (!box.hidden) { box.scrollIntoView({ behavior: "smooth", block: "center" }); $("msgText").focus(); }
-    });
-    $("msgCancel").addEventListener("click", function () { $("composer").hidden = true; $("msgError").hidden = true; });
-    $("msgSend").addEventListener("click", function () { sendMessage(s); });
-    $("msgText").addEventListener("input", function () { $("msgError").hidden = true; });
+    if (current.data.can_message) {
+      $("actMsg").addEventListener("click", function () {
+        haptic();
+        var box = $("composer");
+        box.hidden = !box.hidden;
+        if (!box.hidden) { box.scrollIntoView({ behavior: "smooth", block: "center" }); $("msgText").focus(); }
+      });
+      $("msgCancel").addEventListener("click", function () { $("composer").hidden = true; $("msgError").hidden = true; });
+      $("msgSend").addEventListener("click", function () { sendMessage(s); });
+      $("msgText").addEventListener("input", function () { $("msgError").hidden = true; });
+    }
     $("actCopy").addEventListener("click", function () {
       copyText(tel);
     });
@@ -582,6 +586,7 @@
   var MSG_ERRORS = {
     blocked: "O'quvchi botni bloklagan yoki akkaunti o'chirilgan — xabar yetmaydi.",
     chat_not_found: "Bu o'quvchi botda chat ochmagan — xabar yetmaydi.",
+    boss_only: "Xabar yuborish faqat Boss uchun.",
     too_many: "Juda ko'p xabar yuborildi. Bir daqiqadan keyin urinib ko'ring.",
     empty_message: "Xabar matnini yozing.",
     message_too_long: "Xabar juda uzun.",
@@ -619,9 +624,9 @@
     else if (window.confirm(question)) go();
   }
 
-  function copyText(text) {
+  function copyText(text, message) {
     if (!text) return;
-    var done = function () { haptic("ok"); toast("Nusxalandi: " + text); };
+    var done = function () { haptic("ok"); toast(message || ("Nusxalandi: " + text)); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, fallback);
     } else { fallback(); }
@@ -633,6 +638,22 @@
       document.body.removeChild(t);
     }
   }
+
+  // ---------- iPhone: qo'ng'iroq ----------
+  // iPhone'dagi Telegram Mini App ko'pincha oddiy `tel:` havolasini ochmaydi (Android'da ochadi).
+  // Shuning uchun iPhone'da raqam avval NUSXALANADI (qo'ng'iroq oynasi ochilmasa ham
+  // telefon ilovasiga qo'yib terish mumkin), shu zahoti qo'ng'iroqni ochishga ham uriniladi.
+  var IS_IOS = (tg && tg.platform === "ios") || /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="tel:"]');
+    if (!a || !IS_IOS) return;                       // Android/kompyuter: havola o'zi ishlaydi
+    e.preventDefault();
+    e.stopPropagation();
+    var tel = a.getAttribute("href").replace(/^tel:/, "");
+    copyText(tel, "Raqam nusxalandi: " + tel + " (qo'ng'iroq ochilmasa, telefon ilovasiga qo'ying)");
+    try { window.location.href = "tel:" + tel; } catch (x) {}
+  }, true);
 
   // ---------- Boshlash ----------
   syncChips();

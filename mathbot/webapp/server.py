@@ -23,7 +23,7 @@ from aiohttp import web
 import config
 import database as db
 from answer_check import answers_equivalent
-from config import ALLOWED_ORIGINS, BOT_TOKEN, can_use_panel, is_admin
+from config import ALLOWED_ORIGINS, BOT_TOKEN, can_use_panel, is_admin, is_boss
 from quiz_structure import all_questions, options_for, DEFAULT_TOTAL_QUESTIONS
 from timezone_utils import now_tashkent
 
@@ -1121,7 +1121,7 @@ async def panel_students_handler(request: web.Request):
 
 
 async def panel_student_handler(request: web.Request):
-    _, err = _panel_user(request)
+    user, err = _panel_user(request)
     if err:
         return err
     try:
@@ -1133,7 +1133,12 @@ async def panel_student_handler(request: web.Request):
     if not student:
         return web.json_response({"error": "not_found"}, status=404)
 
-    result = {"student": _course_label(student), "notes": await db.get_panel_notes(telegram_id)}
+    result = {
+        "student": _course_label(student),
+        "notes": await db.get_panel_notes(telegram_id),
+        # O'quvchiga botdan xabar yuborish faqat Boss'ga ruxsat (adminlar ko'radi va izoh yozadi xolos)
+        "can_message": is_boss(user["id"]),
+    }
     for section in ("tests", "aplus", "attendance"):
         items, total = await db.get_panel_student_section(telegram_id, section, 6, 0)
         result[section] = {"items": items, "total": total}
@@ -1207,6 +1212,8 @@ async def panel_send_message_handler(request: web.Request):
     user, err = _panel_user(request)
     if err:
         return err
+    if not is_boss(user["id"]):
+        return web.json_response({"error": "boss_only"}, status=403)
     try:
         telegram_id = int(request.match_info["id"])
         body = await request.json()
