@@ -122,6 +122,13 @@
     return phone || "";
   }
 
+  // Rol: botda ro'yxatdan o'tishda tanlangan ("teacher" - o'qituvchi, qolgani / bo'sh - o'quvchi)
+  function roleInfo(s) {
+    return s.role === "teacher"
+      ? { label: "O'qituvchi", cls: "role-teacher" }
+      : { label: "O'quvchi", cls: "role-student" };
+  }
+
   // Xavf darajasi: ro'yxatdan o'tganidan beri berilgan vazifalarning qancha qismi qilinmagan
   function risk(s) {
     if (!s.tests_total) return "new";
@@ -226,12 +233,13 @@
     var av = RISK_AVATAR[lvl];
     var tel = phoneHref(s.phone);
     var place = [s.region, s.district].filter(Boolean).join(", ");
-    var meta = [place, s.role === "teacher" ? "O'qituvchi" : ""].filter(Boolean).join(" · ") || (s.course || "");
+    var meta = place || s.course || "";
+    var role = roleInfo(s);
     return '<div class="card risk-' + lvl + '" data-id="' + esc(s.telegram_id) + '" tabindex="0" role="button" style="animation-delay:' + Math.min(index, 8) * 25 + 'ms">' +
       '<div class="card-top">' +
         '<div class="avatar" style="--av-ink:' + av[0] + ";--av-bg:" + av[1] + '">' + esc(initials(s.full_name)) + "</div>" +
         '<div class="card-id"><div class="card-name">' + esc(s.full_name || "Ismsiz") + "</div>" +
-        '<div class="card-meta">' + esc(meta) + "</div></div>" +
+        '<div class="card-meta"><span class="role ' + role.cls + '">' + role.label + "</span>" + (meta ? " " + esc(meta) : "") + "</div></div>" +
         '<span class="badge ' + lvl + '">' + RISK_LABEL[lvl] + "</span>" +
       "</div>" +
       '<div class="meters">' + meter("Vazifa", s.tests_done, s.tests_total) + meter("Davomat", s.attendance_attended, s.attendance_total) + "</div>" +
@@ -463,6 +471,7 @@
       "</div>" +
 
       '<div class="kv">' +
+        kv("Rol", '<span class="role ' + roleInfo(s).cls + '">' + roleInfo(s).label + "</span>", true) +
         kv("Telefon", fmtPhone(s.phone)) + kv("Kurs", s.course) + kv("Hudud", place) +
         kv("Ro'yxatdan o'tgan", fmtDate(s.registered_at), true) + kv("Telegram ID", s.telegram_id) +
       "</div>" +
