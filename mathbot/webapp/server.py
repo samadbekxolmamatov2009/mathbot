@@ -23,7 +23,7 @@ from aiohttp import web
 import config
 import database as db
 from answer_check import answers_equivalent
-from config import ALLOWED_ORIGINS, BOT_TOKEN, can_use_panel, is_admin, is_boss
+from config import ALLOWED_ORIGINS, BOT_TOKEN, can_remove_student, can_use_panel, is_admin, is_boss
 from quiz_structure import all_questions, options_for, DEFAULT_TOTAL_QUESTIONS
 from timezone_utils import now_tashkent
 
@@ -1116,6 +1116,7 @@ async def panel_students_handler(request: web.Request):
         worst_first=request.query.get("sort", "worst") != "newest",
         limit=_int_param(request, "limit", 20, 1, 50),
         offset=_int_param(request, "offset", 0, 0, 1_000_000),
+        uncalled=request.query.get("uncalled") == "1",
     )
     return web.json_response({"items": [_course_label(i) for i in items], "total": total})
 
@@ -1138,6 +1139,7 @@ async def panel_student_handler(request: web.Request):
         "notes": await db.get_panel_notes(telegram_id),
         # O'quvchiga botdan xabar yuborish faqat Boss'ga ruxsat (adminlar ko'radi va izoh yozadi xolos)
         "can_message": is_boss(user["id"]),
+        "can_remove": can_remove_student(user["id"]),
     }
     for section in ("tests", "aplus", "attendance"):
         items, total = await db.get_panel_student_section(telegram_id, section, 6, 0)
@@ -1189,6 +1191,134 @@ async def panel_add_note_handler(request: web.Request):
     ) or user.get("username") or f"ID {user['id']}"
     await db.add_panel_note(telegram_id, author, note)
     return web.json_response({"notes": await db.get_panel_notes(telegram_id)})
+
+
+def _actor_name(user: dict) -> str:
+    return " ".join(
+        p for p in (user.get("first_name"), user.get("last_name")) if p
+    ) or user.get("username") or f"ID {user['id']}"
+
+
+async def _telegram_api(method: str, payload: dict) -> dict:
+    """Telegram Bot API'ga to'g'ridan-to'g'ri so'rov (veb-servisda bot obyekti yo'q)."""
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
+        async with session.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/{method}", json=payload
+        ) as resp:
+            return await resp.json(content_type=None)
+
+
+async def panel_call_mark_handler(request: web.Request):
+    """"Qo'ng'iroq qilingan" belgisini qo'yadi / yana bir marta yozadi (called=true) yoki
+    olib tashlaydi (called=false). Boss ham, admin ham qo'ya oladi."""
+    user, err = _panel_user(request)
+    if err:
+        return err
+    try:
+        telegram_id = int(request.match_info["id"])
+        body = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        return web.json_response({"error": "bad_request"}, status=400)
+    if not await db.get_panel_student(telegram_id):
+        return web.json_response({"error": "not_found"}, status=404)
+
+    if body.get("called") is False:
+        await db.clear_student_call_mark(telegram_id)
+    else:
+        await db.mark_student_called(telegram_id, user["id"], _actor_name(user))
+
+    s = await db.get_panel_student(telegram_id)
+    mark = None
+    if s and s.get("called_at"):
+        mark = {"by": s["called_by"], "at": s["called_at"], "count": s["call_count"]}
+    return web.json_response({"call_mark": mark})
+
+
+_GROUP_ERRORS = (
+    ("not enough rights", "no_rights"),
+    ("chat_admin_required", "no_rights"),
+    ("need to be an administrator", "no_rights"),
+    ("administrator of the chat", "target_admin"),
+    ("can't remove chat owner", "target_admin"),
+    ("chat not found", "chat_not_found"),
+)
+
+
+async def panel_remove_student_handler(request: web.Request):
+    """O'quvchini guruhdan (kursning obuna tekshiriladigan chatidan) va botdan o'chiradi.
+    Qaytarib bo'lmaydi. Hozircha faqat Boss (PANEL_REMOVE_FOR_ADMINS=1 bilan adminlarga ham).
+    Tartib: avval guruhdan chiqariladi; u muvaffaqiyatsiz bo'lsa HECH NARSA o'chmaydi
+    (skip_group=true bilan faqat botdan o'chirish mumkin)."""
+    user, err = _panel_user(request)
+    if err:
+        return err
+    if not can_remove_student(user["id"]):
+        return web.json_response({"error": "not_allowed"}, status=403)
+    try:
+        telegram_id = int(request.match_info["id"])
+        body = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        return web.json_response({"error": "bad_request"}, status=400)
+    if body.get("confirm") is not True:
+        return web.json_response({"error": "confirm_required"}, status=400)
+
+    student = await db.get_panel_student(telegram_id)
+    if not student:
+        return web.json_response({"error": "not_found"}, status=404)
+    if is_admin(telegram_id) or is_boss(telegram_id):
+        return web.json_response({"error": "protected"}, status=403)
+
+    reason = str(body.get("reason", "")).strip()[:200]
+    actor = _actor_name(user)
+    course_key = student.get("course")
+    channel = await db.get_setting(f"subscription_channel_{course_key}") or \
+        config.COURSES.get(course_key, {}).get("channel")
+
+    group = "skipped" if body.get("skip_group") is True else "no_channel"
+    if channel and body.get("skip_group") is not True:
+        try:
+            ban = await _telegram_api("banChatMember", {
+                "chat_id": channel, "user_id": telegram_id, "revoke_messages": False,
+            })
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            return web.json_response({"error": "telegram_unreachable"}, status=502)
+        if not ban.get("ok"):
+            desc = str(ban.get("description", "")).lower()
+            code = next((c for k, c in _GROUP_ERRORS if k in desc), "group_failed")
+            log.warning("Guruhdan chiqarilmadi (%s -> %s): %s", telegram_id, channel, ban)
+            return web.json_response({"error": code}, status=409)
+        # Darrov "unban": o'quvchi guruhdan chiqarildi, lekin abadiy bloklanmaydi
+        try:
+            await _telegram_api("unbanChatMember", {
+                "chat_id": channel, "user_id": telegram_id, "only_if_banned": True,
+            })
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            log.warning("unbanChatMember xato (%s) - o'quvchi guruhda bloklangan holda qoldi", telegram_id)
+        group = "removed"
+
+    await db.add_panel_note(
+        telegram_id, actor,
+        f"🗑 Botdan{' va guruhdan' if group == 'removed' else ''} o'chirildi"
+        + (f". Sabab: {reason}" if reason else ""),
+    )
+    await db.delete_user(telegram_id)
+    await db.clear_student_call_mark(telegram_id)
+    log.warning("O'quvchi o'chirildi: %s (%s) | kim: %s (%s) | guruh: %s | sabab: %s",
+                student.get("full_name"), telegram_id, actor, user["id"], group, reason)
+
+    # Boshqa Boss'larga xabar (kim, kimni, nega) - javobgarlik uchun
+    text = (f"🗑 O'quvchi o'chirildi: {student.get('full_name') or 'Ismsiz'} (ID {telegram_id})\n"
+            f"Kim tomonidan: {actor}\nGuruh: {'chiqarildi' if group == 'removed' else group}"
+            + (f"\nSabab: {reason}" if reason else ""))
+    for boss_id in config.BOSS_IDS:
+        if boss_id == user["id"]:
+            continue
+        try:
+            await _telegram_api("sendMessage", {"chat_id": boss_id, "text": text})
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            pass
+
+    return web.json_response({"removed_from_bot": True, "group": group})
 
 
 PANEL_MESSAGE_MAX = 3500
@@ -1287,5 +1417,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/panel/student/{id}/{section}", panel_student_section_handler)
     app.router.add_post("/api/panel/student/{id}/notes", panel_add_note_handler)
     app.router.add_post("/api/panel/student/{id}/message", panel_send_message_handler)
+    app.router.add_post("/api/panel/student/{id}/call-mark", panel_call_mark_handler)
+    app.router.add_post("/api/panel/student/{id}/remove", panel_remove_student_handler)
     app.router.add_static("/", STATIC_DIR, show_index=False)
     return app

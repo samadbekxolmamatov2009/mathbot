@@ -1459,7 +1459,8 @@ async def mark_special_task_notified(task_id: int):
 _PANEL_COLS = (
     "telegram_id", "full_name", "course", "region", "district", "phone",
     "registered_at", "role", "days_registered", "tests_done", "tests_total",
-    "attendance_attended", "attendance_total", "tests_missed", "attendance_missed",
+    "attendance_attended", "attendance_total", "called_at", "called_by", "call_count",
+    "tests_missed", "attendance_missed",
 )
 
 _PANEL_INNER = """
@@ -1470,8 +1471,10 @@ _PANEL_INNER = """
            (SELECT COUNT(*) FROM tests t WHERE t.created_at >= u.registered_at)
              + (SELECT COUNT(*) FROM aplus_tests t WHERE t.created_at >= u.registered_at) AS tests_total,
            COALESCE(att.cnt, 0) AS attendance_attended,
-           (SELECT COUNT(*) FROM attendance_sessions s WHERE s.created_at >= u.registered_at) AS attendance_total
+           (SELECT COUNT(*) FROM attendance_sessions s WHERE s.created_at >= u.registered_at) AS attendance_total,
+           cm.called_at AS called_at, cm.by_name AS called_by, COALESCE(cm.call_count, 0) AS call_count
     FROM users u
+    LEFT JOIN panel_call_marks cm ON cm.telegram_id = u.telegram_id
     LEFT JOIN (
         SELECT s.telegram_id, COUNT(*) AS cnt
         FROM test_submissions s
@@ -1508,17 +1511,57 @@ _PANEL_ORDER_NEWEST = "registered_at DESC, telegram_id ASC"
 
 
 def _panel_row_to_dict(r):
-    item = {c: r[i] for i, c in enumerate(_PANEL_COLS[:8])}
-    item.update({
-        "days_registered": r[8], "tests_done": r[9], "tests_total": r[10],
-        "attendance_attended": r[11], "attendance_total": r[12],
-        "tests_missed": r[13], "attendance_missed": r[14],
-    })
-    return item
+    return {c: r[i] for i, c in enumerate(_PANEL_COLS)}
 
 
-def _panel_where(search, absent_session_id):
+_call_marks_ready = False
+
+
+async def ensure_call_marks_table():
+    """"Qo'ng'iroq qilingan" belgilari jadvali (bir marta, keyingi chaqiruvlarda tekshirilmaydi).
+    Panel so'rovlari shu jadvalga LEFT JOIN qiladi, shuning uchun u har doim mavjud bo'lishi shart."""
+    global _call_marks_ready
+    if _call_marks_ready:
+        return
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "CREATE TABLE IF NOT EXISTS panel_call_marks ("
+            "telegram_id INTEGER PRIMARY KEY, "
+            "by_id INTEGER, "
+            "by_name TEXT, "
+            "called_at TEXT, "
+            "call_count INTEGER NOT NULL DEFAULT 1)"
+        )
+        await db.commit()
+    _call_marks_ready = True
+
+
+async def mark_student_called(telegram_id: int, by_id: int, by_name: str):
+    """Belgi qo'yadi (yoki yana bir marta qo'ng'iroq qilinganini yozadi: sanasi/kim yangilanadi,
+    soni 1 ga oshadi)."""
+    await ensure_call_marks_table()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO panel_call_marks (telegram_id, by_id, by_name, called_at, call_count) "
+            "VALUES (?, ?, ?, datetime('now'), 1) "
+            "ON CONFLICT(telegram_id) DO UPDATE SET by_id = excluded.by_id, by_name = excluded.by_name, "
+            "called_at = datetime('now'), call_count = call_count + 1",
+            (telegram_id, by_id, by_name),
+        )
+        await db.commit()
+
+
+async def clear_student_call_mark(telegram_id: int):
+    await ensure_call_marks_table()
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute("DELETE FROM panel_call_marks WHERE telegram_id = ?", (telegram_id,))
+        await db.commit()
+
+
+def _panel_where(search, absent_session_id, uncalled=False):
     clauses, params = [], []
+    if uncalled:
+        clauses.append("AND cm.telegram_id IS NULL")
     if search:
         clauses.append("AND LOWER(u.full_name) LIKE ?")
         params.append(f"%{search.strip().lower()}%")
@@ -1541,9 +1584,10 @@ async def get_last_attendance_session_id():
 
 
 async def get_panel_students(search=None, absent_session_id=None, worst_first=True,
-                             limit=20, offset=0):
+                             limit=20, offset=0, uncalled=False):
     """(items, total) qaytaradi. items - lug'atlar ro'yxati."""
-    extra, params = _panel_where(search, absent_session_id)
+    await ensure_call_marks_table()
+    extra, params = _panel_where(search, absent_session_id, uncalled)
     inner = _PANEL_INNER.format(extra_where=extra)
     order = _PANEL_ORDER_WORST if worst_first else _PANEL_ORDER_NEWEST
     async with aiosqlite.connect(DB_PATH) as db:
@@ -1561,6 +1605,7 @@ async def get_panel_students(search=None, absent_session_id=None, worst_first=Tr
 
 async def get_panel_summary(last_session_id=None):
     """Panel tepasidagi umumiy ko'rsatkichlar."""
+    await ensure_call_marks_table()
     inner = _PANEL_INNER.format(extra_where="")
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
@@ -1599,6 +1644,7 @@ async def get_panel_summary(last_session_id=None):
 
 async def get_panel_student(telegram_id: int):
     """Bitta o'quvchi (panel ko'rsatkichlari bilan) yoki None."""
+    await ensure_call_marks_table()
     inner = _PANEL_INNER.format(extra_where="AND u.telegram_id = ?")
     sql = (
         "SELECT *, (tests_total - tests_done) AS tests_missed, "

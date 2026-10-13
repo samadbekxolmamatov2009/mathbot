@@ -45,6 +45,16 @@ def can_use_panel(user_id) -> bool:
     return is_boss(user_id) or (PANEL_FOR_ADMINS and is_admin(user_id))
 
 
+# Paneldan o'quvchini botdan va guruhdan O'CHIRISH (qaytarib bo'lmaydigan amal): hozircha
+# faqat Boss. Oddiy adminlarga ochish uchun PANEL_REMOVE_FOR_ADMINS=1 qo'ying
+# (adminlar o'chirsa, Boss'larga xabar boradi).
+PANEL_REMOVE_FOR_ADMINS = os.getenv("PANEL_REMOVE_FOR_ADMINS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def can_remove_student(user_id) -> bool:
+    return is_boss(user_id) or (PANEL_REMOVE_FOR_ADMINS and can_use_panel(user_id))
+
+
 DB_PATH = "mathbot.db"
 
 # Turso (libSQL) - tarmoq orqali ulaniladigan baza. Render'da botlar

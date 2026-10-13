@@ -510,3 +510,40 @@ h1, h2, h3, p { margin: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* ----- Qo'ng'iroq belgisi ----- */
+.called {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; font-size: 12px; font-weight: 600;
+  color: var(--ok); background: var(--ok-soft); border-radius: 10px; width: fit-content; max-width: 100%;
+}
+.callmark-btn {
+  width: 100%; margin-top: 10px; padding: 13px; font-size: 14px; font-weight: 700;
+  color: var(--ok); background: var(--ok-soft); border: 1px dashed color-mix(in srgb, var(--ok) 50%, transparent);
+  border-radius: 14px;
+}
+.callmark-btn:active { transform: scale(0.98); }
+.callmark {
+  margin-top: 10px; padding: 12px 14px; display: grid; gap: 10px;
+  background: var(--ok-soft); border: 1px solid color-mix(in srgb, var(--ok) 35%, transparent); border-radius: 14px;
+}
+.callmark-info { display: grid; gap: 2px; font-size: 14px; }
+.callmark-info span { font-size: 12.5px; color: var(--muted); font-weight: 600; }
+.callmark-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.callmark-actions button {
+  padding: 10px 6px; font-size: 12.5px; font-weight: 700; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 11px;
+}
+
+/* ----- Xavfli amal ----- */
+.danger-zone {
+  margin-top: 26px; padding: 14px; display: grid; gap: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent); background: var(--danger-soft); border-radius: 16px;
+}
+.danger-zone .section-title { margin: 0; color: var(--danger); }
+.danger-zone .reason {
+  width: 100%; padding: 11px 13px; font: inherit; font-size: 14.5px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px; outline: 0;
+}
+.btn-danger { color: #fff; background: var(--danger); }
+.btn-ghost { color: var(--danger); background: transparent; border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent); }
