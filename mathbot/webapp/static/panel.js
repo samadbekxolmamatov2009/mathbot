@@ -624,9 +624,9 @@
     else if (window.confirm(question)) go();
   }
 
-  function copyText(text) {
+  function copyText(text, message) {
     if (!text) return;
-    var done = function () { haptic("ok"); toast("Nusxalandi: " + text); };
+    var done = function () { haptic("ok"); toast(message || ("Nusxalandi: " + text)); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, fallback);
     } else { fallback(); }
@@ -638,6 +638,22 @@
       document.body.removeChild(t);
     }
   }
+
+  // ---------- iPhone: qo'ng'iroq ----------
+  // iPhone'dagi Telegram Mini App ko'pincha oddiy `tel:` havolasini ochmaydi (Android'da ochadi).
+  // Shuning uchun iPhone'da raqam avval NUSXALANADI (qo'ng'iroq oynasi ochilmasa ham
+  // telefon ilovasiga qo'yib terish mumkin), shu zahoti qo'ng'iroqni ochishga ham uriniladi.
+  var IS_IOS = (tg && tg.platform === "ios") || /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+
+  document.addEventListener("click", function (e) {
+    var a = e.target.closest && e.target.closest('a[href^="tel:"]');
+    if (!a || !IS_IOS) return;                       // Android/kompyuter: havola o'zi ishlaydi
+    e.preventDefault();
+    e.stopPropagation();
+    var tel = a.getAttribute("href").replace(/^tel:/, "");
+    copyText(tel, "Raqam nusxalandi: " + tel + " (qo'ng'iroq ochilmasa, telefon ilovasiga qo'ying)");
+    try { window.location.href = "tel:" + tel; } catch (x) {}
+  }, true);
 
   // ---------- Boshlash ----------
   syncChips();
