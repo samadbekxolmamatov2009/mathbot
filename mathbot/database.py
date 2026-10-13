@@ -1081,20 +1081,37 @@ def _submitted_on_time(submitted_at, end_time) -> bool:
     return str(submitted_at)[:16].replace(" ", "T") <= str(end_time)
 
 
-def _streak_flag(submitted_at, end_time, now_str: str):
+def _streak_flag(submitted_at, end_time, now_str: str, strict: bool = True):
     """Bitta test streak uchun qanday hisoblanishi (submitted_at - topshirilgan vaqt yoki
     topshirilmagan bo'lsa None):
-    True  - MUDDATIDA topshirilgan (streak davom etadi, +1);
+    True  - topshirilgan va (strict bo'lsa) MUDDATIDA topshirilgan: streak davom etadi, +1;
     None  - hali topshirilmagan, LEKIN muddati hali tugamagan: hozircha na
             streak'ni uzadi, na oshiradi (o'quvchi hali ulgurishi mumkin -
             masalan 12-vazifani 11-vazifadan oldin ishlashi);
-    False - muddati o'tib ketgan va topshirilmagan YOKI muddatdan KEYIN (kech) topshirilgan:
-            streak uziladi (kech topshirilgan test streakka kirmaydi)."""
+    False - muddati o'tib ketgan va topshirilmagan YOKI (strict bo'lsa) muddatdan KEYIN (kech)
+            topshirilgan: streak uziladi.
+    strict=False (yangi qoida kuchga kirishidan OLDIN yaratilgan testlar) - kech topshirilgan
+    test ham oldingidek streakka kiradi."""
     if submitted_at is not None:
-        return _submitted_on_time(submitted_at, end_time)
+        return _submitted_on_time(submitted_at, end_time) if strict else True
     if end_time and str(end_time) > now_str:
         return None
     return False
+
+
+async def get_streak_strict_since() -> str:
+    """"Kech topshirilgan test streakni uzadi" qoidasi KUCHGA KIRGAN vaqt (UTC, "YYYY-MM-DD HH:MM:SS",
+    testlarning created_at bilan bir xil format). Shu vaqtdan OLDIN yaratilgan testlarda eski qoida
+    (kech topshirish ham streakka kiradi), keyin yaratilganlarida yangi qoida.
+    Bu vaqt FAQAT BIR MARTA - birinchi hisoblashda - bazaga yoziladi va keyingi deploylarda
+    o'zgarmaydi (bot va veb-servis bir vaqtda urinsa ham birinchisi qoladi)."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            "INSERT INTO bot_settings (key, value) VALUES ('streak_strict_since', datetime('now')) "
+            "ON CONFLICT(key) DO NOTHING"
+        )
+        await db.commit()
+    return await get_setting("streak_strict_since")
 
 
 def _merge_streak_items(test_rows, aplus_rows):
@@ -1107,18 +1124,21 @@ def _merge_streak_items(test_rows, aplus_rows):
     return items
 
 
-def _unified_streak_bonuses(items, get_submitted_at, now_str):
+def _unified_streak_bonuses(items, get_submitted_at, now_str, strict_since=None):
     """Oddiy va A+ testlar uchun BITTA umumiy streak. get_submitted_at(tur, test_id) -
     topshirilgan vaqt yoki None (topshirilmagan). Har bir muddatida topshirilgan test
     oldingisidan 1 ball ko'p beradi (1, 2, 3, ...); muddati o'tgan topshirilmagan YOKI kech
     topshirilgan test (False) streak'ni 1 dan boshlaydi; muddati hali tugamagan
     topshirilmagan test (None) o'tkazib yuboriladi (streak'ni uzmaydi ham, oshirmaydi ham).
-    (oddiy_bonus, aplus_bonus) qaytaradi: har bir testning bonusi o'z turiga yoziladi,
+    strict_since - yangi qoida kuchga kirgan vaqt (get_streak_strict_since); None bo'lsa - hamma testda
+    eski qoida. (oddiy_bonus, aplus_bonus) qaytaradi: har bir testning bonusi o'z turiga yoziladi,
     yig'indisi - umumiy streak bonusi."""
     streak = 0
     bonus = [0, 0]
-    for _created, kind, test_id, end_time in items:
-        flag = _streak_flag(get_submitted_at(kind, test_id), end_time, now_str)
+    for created, kind, test_id, end_time in items:
+        # Yangi qoida faqat strict_since'dan KEYIN yaratilgan testlarga; eskilarida kech topshirish ham sanaladi
+        strict = strict_since is not None and (created or "") >= strict_since
+        flag = _streak_flag(get_submitted_at(kind, test_id), end_time, now_str, strict)
         if flag is None:
             continue
         if flag:
@@ -1135,7 +1155,9 @@ async def get_user_coins(telegram_id: int) -> dict:
     - test natijasi: har bir to'g'ri javob uchun 1 ball (test 'score' ustunidan)
     - doimiy ishtirok: oddiy VA A+ testlarni BITTA umumiy ketma-ketlikda (yaratilgan
       tartibida), muddatida ishlash uchun streak bonusi (1, 2, 3, ...); muddatida
-      ishlamasa (yoki kech topshirsa) yana 1 dan boshlanadi. Natijada bonus ikkiga ajratiladi
+      ishlamasa yana 1 dan boshlanadi (KECH topshirish ham streakni uzadi - lekin faqat
+      get_streak_strict_since() dan KEYIN yaratilgan testlarda; eskilarida kech topshirish sanaladi).
+      Natijada bonus ikkiga ajratiladi
       (test_streak_coins - oddiy testlardan, aplus_streak_coins - A+ testlardan olgani).
     - A+ testlar: har bir to'g'ri javob uchun 1 ball
     """
@@ -1189,11 +1211,13 @@ async def get_user_coins(telegram_id: int) -> dict:
 
     attendance_coins = attendance_count
     now_str = _now_deadline_str()
+    strict_since = await get_streak_strict_since()
     submitted_by_kind = (submitted_test_ids, submitted_aplus_ids)
     test_streak_coins, aplus_streak_coins = _unified_streak_bonuses(
         _merge_streak_items(test_rows, aplus_rows),
         lambda kind, test_id: submitted_by_kind[kind].get(test_id),
         now_str,
+        strict_since,
     )
 
     return {
@@ -1259,6 +1283,7 @@ async def get_leaderboard(limit: int = 50):
             aplus_scores = {row["telegram_id"]: row["total_score"] for row in await cursor.fetchall()}
 
     now_str = _now_deadline_str()
+    strict_since = await get_streak_strict_since()
     streak_items = _merge_streak_items(test_rows, aplus_rows)   # hamma o'quvchi uchun bir xil
     leaderboard = []
     for u in users:
@@ -1269,6 +1294,7 @@ async def get_leaderboard(limit: int = 50):
             streak_items,
             lambda kind, test_id, _t=tid: submitted_by_kind[kind].get((test_id, _t)),
             now_str,
+            strict_since,
         )
         coins = (
             attendance_coins + test_scores.get(tid, 0) + test_streak_coins
