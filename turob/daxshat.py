@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from datetime import datetime
 
 import aiosqlite
@@ -15,7 +16,14 @@ from aiogram.types import (
 from aiogram.exceptions import TelegramBadRequest
 
 # ====== SOZLAMALAR ======
-BOT_TOKEN = "8949758073:AAHN_yAycBiuQRo2oVfIqvsh-_h6ZXv_Qtw"
+# Bot tokeni KODGA YOZILMAYDI (kod ochiq repoda turadi - token ochiq qolsa, bot o'g'irlanadi).
+# Hosting (Render) sozlamalariga DAXSHAT_BOT_TOKEN muhit o'zgaruvchisi qilib qo'ying.
+BOT_TOKEN = os.getenv("DAXSHAT_BOT_TOKEN", "").strip()
+if not BOT_TOKEN:
+    raise RuntimeError(
+        "DAXSHAT_BOT_TOKEN topilmadi. Bot tokenini @BotFather dan oling va "
+        "DAXSHAT_BOT_TOKEN muhit o'zgaruvchisiga qo'ying."
+    )
 CHANNEL_USERNAME = "@Sertifikat_pro"
 ADMIN_IDS = [8113300476, 222222222]  # o'zingizning va boshqa adminlarning Telegram user_id'larini shu yerga yozing
 DB_PATH = "bot.db"
@@ -502,6 +510,8 @@ async def main():
     BOT_USERNAME = me.username
     await init_db()
     await setup_commands()
+    # Begona webhook qolib ketmasin (token o'g'irlangan bo'lsa hujumchi qo'yib ketgan bo'lishi mumkin)
+    await bot.delete_webhook(drop_pending_updates=False)
     await dp.start_polling(bot)
 
 
