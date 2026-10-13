@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="color-scheme" content="light dark" />
+<meta name="robots" content="noindex" />
+<title>Qo'ng'iroq</title>
+<style>
+  :root { --bg:#f3f5fb; --card:#fff; --ink:#0f172a; --muted:#64748b; --line:#e4e8f2; --ok:#17a05b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b1020; --card:#131a2e; --ink:#e8ecf8; --muted:#93a0bd; --line:#243050; --ok:#3ccf86; } }
+  * { box-sizing: border-box; }
+  body { margin:0; min-height:100vh; display:grid; place-items:center; padding:24px;
+    background:var(--bg); color:var(--ink);
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif; }
+  .card { width:100%; max-width:380px; text-align:center; padding:28px 22px; background:var(--card);
+    border:1px solid var(--line); border-radius:22px; box-shadow:0 8px 30px rgba(15,23,42,.08); }
+  .ico { width:64px; height:64px; margin:0 auto 14px; display:grid; place-items:center; border-radius:20px;
+    color:#fff; background:var(--ok); }
+  h1 { margin:0 0 4px; font-size:15px; font-weight:600; color:var(--muted); }
+  .num { margin:0 0 20px; font-size:26px; font-weight:800; letter-spacing:.01em; word-break:break-all; }
+  a.call { display:block; padding:16px; border-radius:16px; background:var(--ok); color:#fff;
+    font-weight:800; font-size:18px; text-decoration:none; }
+  button { margin-top:12px; width:100%; padding:13px; border:1px solid var(--line); background:transparent;
+    color:var(--ink); border-radius:14px; font:inherit; font-weight:600; }
+  .err { color:#e5484d; font-weight:600; }
+  .hint { margin-top:14px; font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+  <main class="card" id="card">
+    <div class="ico" aria-hidden="true">
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .4 1.9.7 2.8a2 2 0 0 1-.5 2.1L8.1 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.8.7a2 2 0 0 1 1.7 2z"/></svg>
+    </div>
+    <h1>Qo'ng'iroq qilinadi</h1>
+    <p class="num" id="num">…</p>
+    <a class="call" id="callBtn" href="#">📞 Qo'ng'iroq qilish</a>
+    <button id="copyBtn" type="button">Raqamni nusxalash</button>
+    <p class="hint">Qo'ng'iroq oynasi o'zi ochilmasa, yashil tugmani bosing.</p>
+  </main>
+<script>
+(function () {
+  // Raqam manzil qismidan (#) olinadi - serverga yuborilmaydi. Faqat + va raqamlar qabul qilinadi.
+  var raw = decodeURIComponent((location.hash || "").slice(1));
+  var tel = raw.replace(/[^\d+]/g, "");
+  var ok = /^\+?\d{7,15}$/.test(tel);
+  var num = document.getElementById("num");
+  var btn = document.getElementById("callBtn");
+  if (!ok) {
+    num.textContent = "Raqam noto'g'ri";
+    num.className = "num err";
+    btn.style.display = "none";
+    document.getElementById("copyBtn").style.display = "none";
+    return;
+  }
+  var pretty = tel.replace(/^\+998(\d{2})(\d{3})(\d{2})(\d{2})$/, "+998 $1 $2 $3 $4");
+  num.textContent = pretty;
+  btn.setAttribute("href", "tel:" + tel);
+  document.getElementById("copyBtn").addEventListener("click", function () {
+    var b = this;
+    function done() { b.textContent = "Nusxalandi ✓"; }
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(tel).then(done, function(){});
+  });
+  // Sahifa ochilishi bilan qo'ng'iroq oynasini o'zi ochishga uriniladi
+  setTimeout(function () { location.href = "tel:" + tel; }, 250);
+})();
+</script>
+</body>
+</html>

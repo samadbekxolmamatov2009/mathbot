@@ -640,9 +640,9 @@
   }
 
   // ---------- iPhone: qo'ng'iroq ----------
-  // iPhone'dagi Telegram Mini App ko'pincha oddiy `tel:` havolasini ochmaydi (Android'da ochadi).
-  // Shuning uchun iPhone'da raqam avval NUSXALANADI (qo'ng'iroq oynasi ochilmasa ham
-  // telefon ilovasiga qo'yib terish mumkin), shu zahoti qo'ng'iroqni ochishga ham uriniladi.
+  // iPhone'dagi Telegram Mini App ichidan `tel:` havolasi ochilmaydi (Android'da ochadi).
+  // Shuning uchun iPhone'da tugma kichik "qo'ng'iroq sahifasi"ni (call.html) TASHQI brauzerda
+  // (Safari) ochadi - u yerda `tel:` ishonchli ishlaydi va telefon ilovasi chiqadi.
   var IS_IOS = (tg && tg.platform === "ios") || /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
 
   document.addEventListener("click", function (e) {
@@ -651,8 +651,11 @@
     e.preventDefault();
     e.stopPropagation();
     var tel = a.getAttribute("href").replace(/^tel:/, "");
-    copyText(tel, "Raqam nusxalandi: " + tel + " (qo'ng'iroq ochilmasa, telefon ilovasiga qo'ying)");
-    try { window.location.href = "tel:" + tel; } catch (x) {}
+    var page = location.origin + "/call.html#" + encodeURIComponent(tel);
+    try {
+      if (tg && tg.openLink) { tg.openLink(page, { try_browser: "safari" }); return; }
+    } catch (x) {}
+    window.location.href = "tel:" + tel;             // zaxira
   }, true);
 
   // ---------- Boshlash ----------
