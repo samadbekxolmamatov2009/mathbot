@@ -1097,34 +1097,47 @@ def _streak_flag(submitted_at, end_time, now_str: str):
     return False
 
 
-def _streak_bonus(flags) -> int:
-    """flags: eng eskisidan boshlab har bir test uchun True / False / None
-    (qarang: _streak_flag). Ketma-ket "True" bo'lgan har bir element oldingisidan
-    1 ball ko'p beradi (1, 2, 3, ...); muddati o'tgan topshirilmagan test (False)
-    bo'lsa, streak yana 1 dan boshlanadi. None (muddati hali tugamagan, hali
-    topshirilmagan) o'tkazib yuboriladi - streak'ni uzmaydi ham, oshirmaydi ham,
-    shuning uchun tartibsiz ishlash (12-ni 11-dan oldin) ballni kamaytirib yubormaydi."""
+def _merge_streak_items(test_rows, aplus_rows):
+    """Oddiy va A+ testlarni BITTA ketma-ketlikka birlashtiradi - yaratilgan vaqti bo'yicha
+    (qaysi biri avval qo'yilgan bo'lsa, shu avval). test_rows / aplus_rows:
+    (id, end_time, created_at). Natija: [(created_at, tur, id, end_time)], tur: 0 - oddiy, 1 - A+."""
+    items = [(created or "", 0, tid, end) for tid, end, created in test_rows]
+    items += [(created or "", 1, tid, end) for tid, end, created in aplus_rows]
+    items.sort(key=lambda x: (x[0], x[1], x[2]))
+    return items
+
+
+def _unified_streak_bonuses(items, get_submitted_at, now_str):
+    """Oddiy va A+ testlar uchun BITTA umumiy streak. get_submitted_at(tur, test_id) -
+    topshirilgan vaqt yoki None (topshirilmagan). Har bir muddatida topshirilgan test
+    oldingisidan 1 ball ko'p beradi (1, 2, 3, ...); muddati o'tgan topshirilmagan YOKI kech
+    topshirilgan test (False) streak'ni 1 dan boshlaydi; muddati hali tugamagan
+    topshirilmagan test (None) o'tkazib yuboriladi (streak'ni uzmaydi ham, oshirmaydi ham).
+    (oddiy_bonus, aplus_bonus) qaytaradi: har bir testning bonusi o'z turiga yoziladi,
+    yig'indisi - umumiy streak bonusi."""
     streak = 0
-    total = 0
-    for done in flags:
-        if done is None:
+    bonus = [0, 0]
+    for _created, kind, test_id, end_time in items:
+        flag = _streak_flag(get_submitted_at(kind, test_id), end_time, now_str)
+        if flag is None:
             continue
-        if done:
+        if flag:
             streak += 1
-            total += streak
+            bonus[kind] += streak
         else:
             streak = 0
-    return total
+    return bonus[0], bonus[1]
 
 
 async def get_user_coins(telegram_id: int) -> dict:
     """Foydalanuvchining tangalarini hisoblaydi:
     - davomat: har bir qatnashgan sessiya uchun flat 1 ball
     - test natijasi: har bir to'g'ri javob uchun 1 ball (test 'score' ustunidan)
-    - doimiy ishtirok: testlarni ketma-ket (o'tkazib yubormay) ishlash uchun
-      streak bonusi (1, 2, 3, ...; bitta testni ishlamasa yana 1 dan boshlanadi)
-    - A+ testlar: har bir to'g'ri javob uchun 1 ball + A+ testlarni ketma-ket
-      ishlash uchun alohida streak bonusi (xuddi oddiy testlardagidek)
+    - doimiy ishtirok: oddiy VA A+ testlarni BITTA umumiy ketma-ketlikda (yaratilgan
+      tartibida), muddatida ishlash uchun streak bonusi (1, 2, 3, ...); muddatida
+      ishlamasa (yoki kech topshirsa) yana 1 dan boshlanadi. Natijada bonus ikkiga ajratiladi
+      (test_streak_coins - oddiy testlardan, aplus_streak_coins - A+ testlardan olgani).
+    - A+ testlar: har bir to'g'ri javob uchun 1 ball
     """
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(
@@ -1134,9 +1147,9 @@ async def get_user_coins(telegram_id: int) -> dict:
             attendance_count = (await cursor.fetchone())[0]
 
         async with db.execute(
-            "SELECT id, end_time FROM tests ORDER BY id ASC"
+            "SELECT id, end_time, created_at FROM tests ORDER BY id ASC"
         ) as cursor:
-            test_rows = [(row[0], row[1]) for row in await cursor.fetchall()]
+            test_rows = [(row[0], row[1], row[2]) for row in await cursor.fetchall()]
 
         async with db.execute(
             "SELECT test_id, submitted_at FROM test_submissions WHERE telegram_id = ?",
@@ -1158,9 +1171,9 @@ async def get_user_coins(telegram_id: int) -> dict:
 
         # ---- A+ testlar ----
         async with db.execute(
-            "SELECT id, end_time FROM aplus_tests ORDER BY id ASC"
+            "SELECT id, end_time, created_at FROM aplus_tests ORDER BY id ASC"
         ) as cursor:
-            aplus_rows = [(row[0], row[1]) for row in await cursor.fetchall()]
+            aplus_rows = [(row[0], row[1], row[2]) for row in await cursor.fetchall()]
 
         async with db.execute(
             "SELECT test_id, submitted_at FROM aplus_submissions WHERE telegram_id = ?",
@@ -1176,11 +1189,11 @@ async def get_user_coins(telegram_id: int) -> dict:
 
     attendance_coins = attendance_count
     now_str = _now_deadline_str()
-    test_streak_coins = _streak_bonus(
-        [_streak_flag(submitted_test_ids.get(tid), end, now_str) for tid, end in test_rows]
-    )
-    aplus_streak_coins = _streak_bonus(
-        [_streak_flag(submitted_aplus_ids.get(tid), end, now_str) for tid, end in aplus_rows]
+    submitted_by_kind = (submitted_test_ids, submitted_aplus_ids)
+    test_streak_coins, aplus_streak_coins = _unified_streak_bonuses(
+        _merge_streak_items(test_rows, aplus_rows),
+        lambda kind, test_id: submitted_by_kind[kind].get(test_id),
+        now_str,
     )
 
     return {
@@ -1210,9 +1223,9 @@ async def get_leaderboard(limit: int = 50):
             attendance_counts = {row["telegram_id"]: row["cnt"] for row in await cursor.fetchall()}
 
         async with db.execute(
-            "SELECT id, end_time FROM tests ORDER BY id ASC"
+            "SELECT id, end_time, created_at FROM tests ORDER BY id ASC"
         ) as cursor:
-            test_rows = [(row[0], row[1]) for row in await cursor.fetchall()]
+            test_rows = [(row[0], row[1], row[2]) for row in await cursor.fetchall()]
 
         async with db.execute(
             "SELECT test_id, telegram_id, submitted_at FROM test_submissions"
@@ -1231,9 +1244,9 @@ async def get_leaderboard(limit: int = 50):
 
         # ---- A+ testlar ----
         async with db.execute(
-            "SELECT id, end_time FROM aplus_tests ORDER BY id ASC"
+            "SELECT id, end_time, created_at FROM aplus_tests ORDER BY id ASC"
         ) as cursor:
-            aplus_rows = [(row[0], row[1]) for row in await cursor.fetchall()]
+            aplus_rows = [(row[0], row[1], row[2]) for row in await cursor.fetchall()]
 
         async with db.execute(
             "SELECT test_id, telegram_id, submitted_at FROM aplus_submissions"
@@ -1246,15 +1259,16 @@ async def get_leaderboard(limit: int = 50):
             aplus_scores = {row["telegram_id"]: row["total_score"] for row in await cursor.fetchall()}
 
     now_str = _now_deadline_str()
+    streak_items = _merge_streak_items(test_rows, aplus_rows)   # hamma o'quvchi uchun bir xil
     leaderboard = []
     for u in users:
         tid = u["telegram_id"]
         attendance_coins = attendance_counts.get(tid, 0)
-        test_streak_coins = _streak_bonus(
-            [_streak_flag(submitted_set.get((test_id, tid)), end, now_str) for test_id, end in test_rows]
-        )
-        aplus_streak_coins = _streak_bonus(
-            [_streak_flag(aplus_submitted_set.get((test_id, tid)), end, now_str) for test_id, end in aplus_rows]
+        submitted_by_kind = (submitted_set, aplus_submitted_set)
+        test_streak_coins, aplus_streak_coins = _unified_streak_bonuses(
+            streak_items,
+            lambda kind, test_id, _t=tid: submitted_by_kind[kind].get((test_id, _t)),
+            now_str,
         )
         coins = (
             attendance_coins + test_scores.get(tid, 0) + test_streak_coins
