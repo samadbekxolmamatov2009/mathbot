@@ -182,7 +182,7 @@
   }
 
   // ---------- Holat ----------
-  var state = { worst: true, absent: false, search: "", offset: 0, total: 0, req: 0, loading: false };
+  var state = { worst: true, absent: false, uncalled: false, search: "", offset: 0, total: 0, req: 0, loading: false };
 
   var listEl = $("list");
   var moreBtn = $("moreBtn");
@@ -235,6 +235,8 @@
         '<span class="badge ' + lvl + '">' + RISK_LABEL[lvl] + "</span>" +
       "</div>" +
       '<div class="meters">' + meter("Vazifa", s.tests_done, s.tests_total) + meter("Davomat", s.attendance_attended, s.attendance_total) + "</div>" +
+      (s.called_at ? '<div class="called">📞 Qo\'ng\'iroq qilingan · ' + esc(s.called_by || "") + " · " + fmtDate(s.called_at) +
+        (s.call_count > 1 ? " · " + s.call_count + " marta" : "") + "</div>" : "") +
       '<div class="card-foot"><span class="days">' +
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' +
         daysText(s.days_registered) + "</span>" +
@@ -269,6 +271,7 @@
     });
     if (state.search) q.set("search", state.search);
     if (state.absent) q.set("absent_last", "1");
+    if (state.uncalled) q.set("uncalled", "1");
 
     return api("/api/panel/students?" + q.toString()).then(function (data) {
       if (req !== state.req) return;      // eskirgan javob
@@ -311,6 +314,8 @@
     $("worstChip").setAttribute("aria-pressed", String(state.worst));
     $("absentChip").classList.toggle("is-on", state.absent);
     $("absentChip").setAttribute("aria-pressed", String(state.absent));
+    $("uncalledChip").classList.toggle("is-on", state.uncalled);
+    $("uncalledChip").setAttribute("aria-pressed", String(state.uncalled));
     $("statAbsentBtn").classList.toggle("is-on", state.absent);
     $("rankHint").hidden = !state.worst;
   }
@@ -322,6 +327,9 @@
     state.absent = !state.absent; haptic(); syncChips(); loadStudents(true);
   }
   $("absentChip").addEventListener("click", toggleAbsent);
+  $("uncalledChip").addEventListener("click", function () {
+    state.uncalled = !state.uncalled; haptic(); syncChips(); loadStudents(true);
+  });
   $("statAbsentBtn").addEventListener("click", toggleAbsent);
 
   var searchTimer = null;
@@ -447,6 +455,7 @@
         '<button class="btn btn-primary" id="msgSend" type="button">Yuborish</button></div>' +
       "</div>" : "") +
 
+      '<div id="callMark"></div>' +
       '<div class="kpis">' +
         '<div class="kpi' + (s.tests_total && !s.tests_done ? " is-bad" : "") + '"><span>Vazifa</span><b>' + s.tests_done + " <small>/ " + s.tests_total + "</small></b></div>" +
         '<div class="kpi' + (s.attendance_total && !s.attendance_attended ? " is-bad" : "") + '"><span>Davomat</span><b>' + s.attendance_attended + " <small>/ " + s.attendance_total + "</small></b></div>" +
@@ -465,7 +474,15 @@
       '<div class="rows" id="notes"></div>' +
       '<div class="note-form"><textarea id="noteText" maxlength="1000" placeholder="Qo\'ng\'iroq natijasi yoki izoh yozing..."></textarea>' +
         '<p class="note-error" id="noteError" hidden></p>' +
-        '<button class="btn btn-primary" id="noteBtn" type="button">Izoh qo\'shish</button></div>';
+        '<button class="btn btn-primary" id="noteBtn" type="button">Izoh qo\'shish</button></div>' +
+      (current.data.can_remove
+        ? '<div class="danger-zone"><h3 class="section-title">⚠️ Xavfli amal</h3>' +
+          '<p class="composer-hint">O\'quvchi o\'qimasa: <b>botdan ham, guruhdan ham</b> o\'chiriladi. Qaytarib bo\'lmaydi (o\'quvchi qayta ro\'yxatdan o\'tishi kerak bo\'ladi).</p>' +
+          '<input class="reason" id="removeReason" maxlength="200" placeholder="Sabab (ixtiyoriy), masalan: o\'qimayman" />' +
+          '<p class="note-error" id="removeError" hidden></p>' +
+          '<button class="btn btn-danger" id="removeBtn" type="button">🚪 O\'qimayman — botdan va guruhdan o\'chirish</button>' +
+          '<button class="btn btn-ghost" id="removeBotOnlyBtn" type="button" hidden>Faqat botdan o\'chirish (guruhga tegmasdan)</button></div>'
+        : "");
 
     // Mini App ichida tg:// havolalari ko'p mijozlarda ochilmaydi - t.me havolasi
     // openTelegramLink orqali ishonchli ochiladi. Avval telefon raqami bo'yicha
@@ -500,6 +517,11 @@
       renderTabs();
     });
     $("noteBtn").addEventListener("click", addNote);
+    renderCallMark();
+    if (current.data.can_remove) {
+      $("removeBtn").addEventListener("click", function () { removeStudent(s, false); });
+      $("removeBotOnlyBtn").addEventListener("click", function () { removeStudent(s, true); });
+    }
     renderTabs();
     renderNotes(current.data.notes);
   }
@@ -581,6 +603,91 @@
     }).catch(function () {
       err.textContent = "Saqlab bo'lmadi. Qayta urinib ko'ring."; err.hidden = false; haptic("err");
     }).then(function () { btn.disabled = false; });
+  }
+
+  // ---------- "Qo'ng'iroq qilingan" belgisi ----------
+  function renderCallMark() {
+    var box = $("callMark");
+    if (!box || !current) return;
+    var s = current.data.student;
+    if (!s.called_at) {
+      box.innerHTML = '<button class="callmark-btn" id="markCalled" type="button">✅ Qo\'ng\'iroq qildim — belgilash</button>';
+      $("markCalled").addEventListener("click", function () { setCallMark(true); });
+      return;
+    }
+    box.innerHTML = '<div class="callmark"><div class="callmark-info">📞 <b>Qo\'ng\'iroq qilingan</b>' +
+      "<span>" + esc(s.called_by || "") + " · " + fmtDate(s.called_at) + (s.call_count > 1 ? " · " + s.call_count + " marta" : "") + "</span></div>" +
+      '<div class="callmark-actions"><button type="button" id="markAgain">+ Yana qo\'ng\'iroq qildim</button>' +
+      '<button type="button" id="markClear">Belgini olib tashlash</button></div></div>';
+    $("markAgain").addEventListener("click", function () { setCallMark(true); });
+    $("markClear").addEventListener("click", function () { setCallMark(false); });
+  }
+
+  function setCallMark(called) {
+    var s = current.data.student, id = s.telegram_id;
+    api("/api/panel/student/" + encodeURIComponent(id) + "/call-mark", { method: "POST", body: { called: called } })
+      .then(function (data) {
+        if (!current || String(current.id) !== String(id)) return;
+        var m = data.call_mark;
+        s.called_at = m ? m.at : null; s.called_by = m ? m.by : null; s.call_count = m ? m.count : 0;
+        renderCallMark();
+        haptic("ok"); toast(called ? "Belgi qo'yildi ✓" : "Belgi olib tashlandi");
+        // ro'yxatdagi kartani yangilaymiz (yoki "qo'ng'iroq qilinmaganlar" filtrida bo'lsa - olib tashlaymiz)
+        var card = document.querySelector('.card[data-id="' + id + '"]');
+        if (card) {
+          if (state.uncalled && called) { card.remove(); state.total = Math.max(0, state.total - 1); state.offset = Math.max(0, state.offset - 1); }
+          else card.outerHTML = cardHtml(s, 0);
+        }
+      })
+      .catch(function () { haptic("err"); toast("Saqlab bo'lmadi, qayta urinib ko'ring"); });
+  }
+
+  // ---------- O'quvchini botdan va guruhdan o'chirish ----------
+  var REMOVE_ERRORS = {
+    no_rights: "Bot guruhda admin emas yoki a'zolarni chiqarish huquqi yo'q.",
+    target_admin: "Bu odam guruhda admin yoki egasi — chiqarib bo'lmaydi.",
+    chat_not_found: "Guruh topilmadi (kurs uchun belgilangan kanal/guruh noto'g'ri).",
+    group_failed: "Guruhdan chiqarib bo'lmadi.",
+    protected: "Admin yoki Boss'ni o'chirib bo'lmaydi.",
+    not_allowed: "Sizda bu amal uchun ruxsat yo'q.",
+    telegram_unreachable: "Telegram bilan bog'lanib bo'lmadi. Qayta urinib ko'ring.",
+  };
+
+  function removeStudent(s, skipGroup) {
+    var err = $("removeError"), reason = $("removeReason").value.trim();
+    err.hidden = true;
+    var question = (s.full_name || "O'quvchi") + (skipGroup
+      ? " faqat BOTdan o'chiriladi (guruhda qoladi). Davom etasizmi?"
+      : " BOTdan ham, GURUHdan ham o'chiriladi. Bu amalni qaytarib bo'lmaydi. Davom etasizmi?");
+    var go = function () {
+      var id = s.telegram_id, btn = $("removeBtn");
+      btn.disabled = true; btn.textContent = "O'chirilmoqda...";
+      api("/api/panel/student/" + encodeURIComponent(id) + "/remove",
+          { method: "POST", body: { confirm: true, reason: reason, skip_group: !!skipGroup } })
+        .then(function (data) {
+          haptic("ok");
+          var g = data.group === "removed" ? "guruhdan ✓" : (data.group === "skipped" ? "guruhga tegilmadi" : "guruh sozlanmagan");
+          toast("O'chirildi: botdan ✓, " + g);
+          var card = document.querySelector('.card[data-id="' + id + '"]');
+          if (card) { card.remove(); state.total = Math.max(0, state.total - 1); state.offset = Math.max(0, state.offset - 1); }
+          current = null; sheet.hidden = true; backdrop.hidden = true; document.body.classList.remove("sheet-open");
+          if (tg && tg.BackButton) { try { tg.BackButton.hide(); } catch (e) {} }
+          $("resultCount").textContent = state.total ? state.offset + " / " + state.total + " ta o'quvchi" : "";
+          loadSummary();
+        })
+        .catch(function (e) {
+          haptic("err");
+          err.textContent = REMOVE_ERRORS[e.message] || "O'chirib bo'lmadi. Qayta urinib ko'ring.";
+          err.hidden = false;
+          // guruh bilan muammo bo'lsa - faqat botdan o'chirish imkoniyatini taklif qilamiz
+          if (!skipGroup && ["no_rights", "chat_not_found", "group_failed", "telegram_unreachable"].indexOf(e.message) >= 0) {
+            $("removeBotOnlyBtn").hidden = false;
+          }
+          btn.disabled = false; btn.textContent = "🚪 O'qimayman — botdan va guruhdan o'chirish";
+        });
+    };
+    if (tg && tg.showConfirm) tg.showConfirm(question, function (ok) { if (ok) go(); });
+    else if (window.confirm(question)) go();
   }
 
   var MSG_ERRORS = {

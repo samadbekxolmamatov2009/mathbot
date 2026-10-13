@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 <meta name="color-scheme" content="light dark" />
 <title>Admin panel</title>
-<link rel="stylesheet" href="/panel.css?v=2" />
+<link rel="stylesheet" href="/panel.css?v=3" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -72,6 +72,9 @@
           <button class="chip" id="absentChip" type="button" aria-pressed="false">
             <span class="chip-dot"></span>📵 Oxirgi darsga kelmaganlar
           </button>
+          <button class="chip" id="uncalledChip" type="button" aria-pressed="false">
+            <span class="chip-dot"></span>📞 Qo'ng'iroq qilinmaganlar
+          </button>
         </div>
         <p class="hint" id="rankHint">Ro'yxatdan o'tganidan beri eng ko'p vazifa qilmaganlar tepada. Teng bo'lsa — avval qo'shilgani, keyin davomati kam bo'lgani.</p>
       </section>
@@ -119,6 +122,6 @@
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="/panel.js?v=8"></script>
+  <script src="/panel.js?v=9"></script>
 </body>
 </html>
