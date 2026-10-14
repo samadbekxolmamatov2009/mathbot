@@ -32,7 +32,7 @@ const resultTitleEl = document.getElementById("resultTitle");
 const resultHintEl = document.getElementById("resultHint");
 
 let stage = "answers";
-const mathKeyboard = createMathKeyboard(document.body);
+mathLiveReady();   // kutubxonani oldindan yuklab qo'yamiz
 
 function pad(n) {
   return String(n).padStart(2, "0");
@@ -97,34 +97,16 @@ function buildFieldRow(key, prefillValue) {
   badge.textContent = key;
   row.appendChild(badge);
 
-  const input = document.createElement("div");
-  input.tabIndex = 0;
-  input.className = "aplus-input";
-  input.dataset.value = prefillValue || "";
-  input.textContent = prefillValue || "";
-  input.dataset.placeholder = "Javob";
-  input.addEventListener("input", () => {
-    const value = input.dataset.value || "";
-    answers[key] = value;
-    row.classList.toggle("answered", !!value.trim());
-    updateProgress();
+  const field = createAnswerField({
+    placeholder: "Javob",
+    prefill: prefillValue || "",
+    onChange: (value) => {
+      answers[key] = value;
+      row.classList.toggle("answered", !!value.trim());
+      updateProgress();
+    },
   });
-  row.appendChild(input);
-
-  const kbdBtn = document.createElement("button");
-  kbdBtn.type = "button";
-  kbdBtn.className = "aplus-kbd-btn";
-  kbdBtn.textContent = "⌨";
-  kbdBtn.addEventListener("click", () => mathKeyboard.toggle(input, kbdBtn));
-  row.appendChild(kbdBtn);
-
-  input.addEventListener("click", () => mathKeyboard.show(input, kbdBtn));
-  input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      mathKeyboard.show(input, kbdBtn);
-    }
-  });
+  row.appendChild(field.el);
 
   if (prefillValue) {
     answers[key] = prefillValue;
@@ -165,7 +147,7 @@ minusBtn.addEventListener("click", removeQuestion);
 
 function goToTimeStage() {
   stage = "time";
-  mathKeyboard.hide();
+  hideMathKeyboard();
   listEl.style.display = "none";
   document.getElementById("questionCountBar").style.display = "none";
   document.querySelector(".header").style.display = "none";
@@ -272,6 +254,7 @@ tg.MainButton.onClick(() => {
 });
 
 async function init() {
+  await mathLiveReady();
   if (editId) {
     if (headerTitleEl) headerTitleEl.textContent = "A+ testni tahrirlash";
     try {

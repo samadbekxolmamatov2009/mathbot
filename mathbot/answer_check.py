@@ -33,6 +33,8 @@ def _eval_node(node):
         return float(node.value)
     if isinstance(node, ast.BinOp) and type(node.op) in _ALLOWED_BINOPS:
         return _ALLOWED_BINOPS[type(node.op)](_eval_node(node.left), _eval_node(node.right))
+    if isinstance(node, ast.Name) and node.id == "pi":
+        return math.pi
     if isinstance(node, ast.UnaryOp) and type(node.op) in _ALLOWED_UNARYOPS:
         return _ALLOWED_UNARYOPS[type(node.op)](_eval_node(node.operand))
     if (
@@ -49,6 +51,7 @@ def _eval_node(node):
 _BARE_SQRT_RE = re.compile(r"√(\d+(?:\.\d+)?)")
 _IMPLICIT_MULT_OPEN_RE = re.compile(r"([0-9)])(sqrt\(|\()")
 _IMPLICIT_MULT_CLOSE_RE = re.compile(r"(\))([0-9])")
+_IMPLICIT_MULT_PI_RE = re.compile(r"([0-9)])(pi)(?![a-z])")
 
 
 def _insert_implicit_mult(s: str) -> str:
@@ -61,6 +64,7 @@ def _insert_implicit_mult(s: str) -> str:
         prev = s
         s = _IMPLICIT_MULT_OPEN_RE.sub(r"\1*\2", s)
         s = _IMPLICIT_MULT_CLOSE_RE.sub(r"\1*\2", s)
+        s = _IMPLICIT_MULT_PI_RE.sub(r"\1*\2", s)
     return s
 
 
@@ -72,6 +76,7 @@ def _normalize_text(s: str) -> str:
     # qolgan "√" belgisi shunchaki "sqrt" ga almashtiriladi.
     s = _BARE_SQRT_RE.sub(lambda m: f"sqrt({m.group(1)})", s)
     s = s.replace("√", "sqrt")
+    s = s.replace("π", "pi")
     s = s.replace("^", "**")
     s = _insert_implicit_mult(s)
     return s
