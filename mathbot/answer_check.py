@@ -73,6 +73,12 @@ def _normalize_text(s: str) -> str:
     s = s.replace(" ", "")
     s = s.replace(",", ".")
     s = s.replace(":", "/")      # "6:3" - bo'lish belgisi (maktabda ":" bilan yoziladi)
+    # Klaviatura/telefon turli xil belgilar yozishi mumkin: uzun minus (U+2212), tire, ko'paytirish, bo'lish
+    for ch in ("\u2212", "\u2013", "\u2014", "\u2012"):
+        s = s.replace(ch, "-")
+    for ch in ("\u00d7", "\u00b7", "\u22c5", "\u2217"):
+        s = s.replace(ch, "*")
+    s = s.replace("\u00f7", "/")
     # "√4" -> "sqrt(4)"; "√(4+5)" ning qavslari allaqachon bor, keyingi qatorda
     # qolgan "√" belgisi shunchaki "sqrt" ga almashtiriladi.
     s = _BARE_SQRT_RE.sub(lambda m: f"sqrt({m.group(1)})", s)
