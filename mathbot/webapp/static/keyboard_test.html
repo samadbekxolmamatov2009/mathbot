@@ -8,6 +8,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
   body { padding: 16px 16px 40px; }
+  .verdict { margin: 4px 0 12px; }
   h1 { font-size: 20px; margin: 4px 0 4px; }
   p.sub { color: var(--hint); font-size: 13px; margin: 0 0 14px; }
   .box { background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
@@ -16,7 +17,7 @@
   .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
   .presets button { border: 1px solid var(--border); background: var(--card-bg); color: var(--text); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
   .go { width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-text); font-size: 16px; font-weight: 800; }
-  .verdict { margin-top: 14px; padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 800; text-align: center; display: none; }
+  .verdict { padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 800; text-align: center; display: none; }
   .verdict.ok { display: block; background: #e3f6ec; color: #17a05b; }
   .verdict.bad { display: block; background: #fdeceb; color: #e5484d; }
 </style>
@@ -38,8 +39,8 @@
     <div class="plain" id="studentPlain"></div>
   </div>
 
+  <div class="verdict" id="verdict" role="status"></div>
   <button class="go" id="goBtn" type="button">Tekshirish</button>
-  <div class="verdict" id="verdict"></div>
 
   <script src="/math_input.js?v=1"></script>
   <script>
@@ -61,8 +62,10 @@
 
     async function check() {
       const verdict = document.getElementById("verdict");
+      const goBtn = document.getElementById("goBtn");
+      hideMathKeyboard();                     // klaviatura natijani yopib qo'ymasin
+      goBtn.disabled = true; goBtn.textContent = "Tekshirilmoqda...";
       verdict.className = "verdict";
-      verdict.style.display = "none";
       try {
         const res = await fetch("/api/aplus/check_answer", {
           method: "POST",
@@ -77,6 +80,9 @@
         verdict.textContent = "⚠️ Tekshirib bo'lmadi: " + e.message;
         verdict.className = "verdict bad";
       }
+      goBtn.disabled = false; goBtn.textContent = "Tekshirish";
+      verdict.scrollIntoView({ block: "center", behavior: "smooth" });
+      try { tg && tg.HapticFeedback && tg.HapticFeedback.notificationOccurred(verdict.classList.contains("ok") ? "success" : "error"); } catch (e) {}
     }
 
     (async function init() {
