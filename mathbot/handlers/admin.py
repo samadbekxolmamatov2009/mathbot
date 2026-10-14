@@ -125,7 +125,7 @@ async def cmd_help(message: Message):
         "➕ A+ yaratish — A+ test yaratish (Mini App orqali)\n"
         "🗂 Mening A+ testlarim — yaratilgan A+ testlar ro'yxati\n"
         "📋 Maxsus topshiriq yaratish — o'quvchilar rasm/PDF yuboradigan topshiriq\n"
-        "📢 Xabar yuborish — barcha o'quvchilarga darhol xabar (matn/rasm/fayl)\n"
+        "📢 Xabar yuborish — barcha o'quvchilarga darhol xabar (matn, rasm, PDF, video, dumaloq video, ovozli xabar va h.k.)\n"
         "⚙️ Sozlamalar — haftalik hisobot vaqtini sozlash\n"
         "/get_sticker_id — botga stiker yuborib, uning file_id'sini olish\n\n"
         "ℹ️ Eslatma: yangi test/A+/maxsus topshiriq faollashtirilganda, barcha "
@@ -281,6 +281,25 @@ def _broadcast_status_kb(count: int) -> InlineKeyboardMarkup:
     )
 
 
+@router.message(Command("xabar_sinov"), F.chat.type == "private")
+async def broadcast_self_test(message: Message):
+    """Xabar yuborishni O'ZINGIZGA sinash: biror xabarga (premium emoji bilan) javob qilib
+    /xabar_sinov yozing - bot uni xuddi o'quvchilarga yuboriladigandek (copy_message) sizga ko'chiradi."""
+    if not is_admin(message.from_user.id):
+        return
+    src = message.reply_to_message
+    if not src:
+        await message.answer(
+            "Sinash uchun: premium emoji bilan xabar yozing, so'ng shu xabarga REPLY qilib /xabar_sinov yuboring.\n"
+            "Bot uni o'quvchilarga yuboriladigan usulda faqat sizga ko'chiradi."
+        )
+        return
+    try:
+        await message.bot.copy_message(message.chat.id, src.chat.id, src.message_id)
+    except Exception as e:
+        await message.answer(f"❌ Ko'chirib bo'lmadi: {e}")
+
+
 @router.message(F.text == "📢 Xabar yuborish")
 async def start_broadcast(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
@@ -290,7 +309,7 @@ async def start_broadcast(message: Message, state: FSMContext):
     await state.update_data(items=[])
     await message.answer(
         "📢 Barcha ro'yxatdan o'tgan foydalanuvchilarga yubormoqchi bo'lgan xabaringizni tayyorlang.\n"
-        "Matn, rasm yoki PDF fayl yuborishingiz mumkin — xohlagancha, istalgan tartibda. "
+        "Matn, rasm, PDF, video, dumaloq video, ovozli xabar, GIF, stiker — istalganini yuborishingiz mumkin, xohlagancha va istalgan tartibda. "
         "Premium emoji, qalin/kursiv matn va havolalar o'z holicha saqlanadi.\n"
         "Tayyor bo'lgach, \"✅ Yuborish\" tugmasini bosing."
     )
@@ -340,6 +359,30 @@ async def collect_broadcast_document(message: Message, state: FSMContext):
     await state.update_data(items=items)
     await message.answer(
         f"✅ Fayl qabul qilindi ({len(items)} ta element to'plandi).",
+        reply_markup=_broadcast_status_kb(len(items)),
+    )
+
+
+_BROADCAST_OTHER_TYPES = {
+    "video": "Video", "video_note": "Dumaloq video", "voice": "Ovozli xabar", "audio": "Audio",
+    "animation": "GIF", "sticker": "Stiker", "location": "Joylashuv", "contact": "Kontakt", "poll": "So'rovnoma",
+}
+
+
+@router.message(Broadcast.composing, F.content_type.in_(set(_BROADCAST_OTHER_TYPES)))
+async def collect_broadcast_other(message: Message, state: FSMContext):
+    """Video, dumaloq video, ovozli xabar, audio, GIF, stiker va boshqalar: yuborishda
+    copy_message bilan o'zgarishsiz ko'chiriladi."""
+    if not is_admin(message.from_user.id):
+        return
+
+    data = await state.get_data()
+    items = data.get("items", [])
+    kind = message.content_type if isinstance(message.content_type, str) else message.content_type.value
+    items.append({"type": kind, "content": None, "chat_id": message.chat.id, "message_id": message.message_id})
+    await state.update_data(items=items)
+    await message.answer(
+        f"✅ {_BROADCAST_OTHER_TYPES.get(kind, 'Xabar')} qabul qilindi ({len(items)} ta element to'plandi).",
         reply_markup=_broadcast_status_kb(len(items)),
     )
 
