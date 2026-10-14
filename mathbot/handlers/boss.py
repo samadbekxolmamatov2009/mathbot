@@ -401,6 +401,8 @@ async def boss_report_here_channel(message: Message):
 async def _save_subscription_chat(message: Message):
     from config import COURSES
     chat_id = str(message.chat.id)
+    if await _is_removal_channel(chat_id):
+        return
     for course_key in COURSES:
         await db.set_setting(f"subscription_channel_{course_key}", chat_id)
     names = ", ".join(c["name"] for c in COURSES.values())
@@ -438,9 +440,18 @@ async def boss_subscription_here_channel(message: Message):
 # Ikkala holatda ham guruhga/kanalga hech qanday xabar yuborilmaydi -
 # tasdiq faqat Boss'ning shaxsiy chatiga keladi.
 
+async def _is_removal_channel(chat_id) -> bool:
+    """Faqat o'quvchi chiqarish uchun ulangan yopiq kanal obuna/hisobot chati bo'lib qolmasligi uchun."""
+    from config import REMOVAL_CHANNEL_ID
+    rm = await db.get_setting("removal_channel_id") or REMOVAL_CHANNEL_ID
+    return bool(rm) and str(rm) == str(chat_id)
+
+
 async def _set_subscription_chat_silent(bot, chat, boss_id: int):
     from config import COURSES
     chat_id = str(chat.id)
+    if await _is_removal_channel(chat_id):
+        return
     for course_key in COURSES:
         await db.set_setting(f"subscription_channel_{course_key}", chat_id)
     # Haftalik hisobot ham shu guruhga yuborilsin
