@@ -67,17 +67,26 @@
       goBtn.disabled = true; goBtn.textContent = "Tekshirilmoqda...";
       verdict.className = "verdict";
       try {
-        const res = await fetch("/api/aplus/check_answer", {
+        const send = () => fetch(location.origin + "/api/aplus/check_answer", {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Init-Data": tg ? tg.initData : "" },
           body: JSON.stringify({ correct: correct.getPlain(), submitted: student.getPlain() }),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || res.status);
+        let res;
+        try { res = await send(); }
+        catch (netErr) {
+          // Tarmoq xatosi (masalan Render servisi uyg'onayotgan bo'lsa): 2 soniyadan keyin bir marta qayta uriniladi
+          await new Promise((r) => setTimeout(r, 2000));
+          res = await send();
+        }
+        const text = await res.text();
+        let data = {};
+        try { data = JSON.parse(text); } catch (e) {}
+        if (!res.ok) throw new Error(data.error || ("server javobi " + res.status));
         verdict.textContent = data.equivalent ? "✅ To'g'ri hisoblanadi" : "❌ Noto'g'ri hisoblanadi";
         verdict.className = "verdict " + (data.equivalent ? "ok" : "bad");
       } catch (e) {
-        verdict.textContent = "⚠️ Tekshirib bo'lmadi: " + e.message;
+        verdict.textContent = "⚠️ Serverga ulanib bo'lmadi (" + e.message + "). Birozdan keyin qayta bosing.";
         verdict.className = "verdict bad";
       }
       goBtn.disabled = false; goBtn.textContent = "Tekshirish";

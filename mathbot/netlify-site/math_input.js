@@ -150,7 +150,9 @@
       return name;            // sin, cos, log, ln, lim ... - nomi shundayligicha
     }
 
-    return parseSeq(false).replace(/\s+/g, "");
+    return parseSeq(false)
+      .replace(/\s+/g, "")
+      .replace(/[\u2212\u2013\u2014\u2012]/g, "-");      // uzun minus/tire -> oddiy "-"
   }
 
   // ---------- oddiy matn -> LaTeX (tahrirlashda avvalgi javobni ko'rsatish uchun) ----------
