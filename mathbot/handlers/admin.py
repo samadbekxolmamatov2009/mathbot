@@ -281,6 +281,25 @@ def _broadcast_status_kb(count: int) -> InlineKeyboardMarkup:
     )
 
 
+@router.message(Command("xabar_sinov"), F.chat.type == "private")
+async def broadcast_self_test(message: Message):
+    """Xabar yuborishni O'ZINGIZGA sinash: biror xabarga (premium emoji bilan) javob qilib
+    /xabar_sinov yozing - bot uni xuddi o'quvchilarga yuboriladigandek (copy_message) sizga ko'chiradi."""
+    if not is_admin(message.from_user.id):
+        return
+    src = message.reply_to_message
+    if not src:
+        await message.answer(
+            "Sinash uchun: premium emoji bilan xabar yozing, so'ng shu xabarga REPLY qilib /xabar_sinov yuboring.\n"
+            "Bot uni o'quvchilarga yuboriladigan usulda faqat sizga ko'chiradi."
+        )
+        return
+    try:
+        await message.bot.copy_message(message.chat.id, src.chat.id, src.message_id)
+    except Exception as e:
+        await message.answer(f"❌ Ko'chirib bo'lmadi: {e}")
+
+
 @router.message(F.text == "📢 Xabar yuborish")
 async def start_broadcast(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
