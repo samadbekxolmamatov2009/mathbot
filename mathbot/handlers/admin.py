@@ -115,8 +115,7 @@ async def cmd_help(message: Message):
     )
     text = (
         "🛠 <b>Admin buyruqlari</b>\n\n"
-        "📋 Davomat hisoboti — oxirgi hisobotdan keyingi yakunlangan davomatlar (PDF jadval)\n"
-        "🧾 Test hisoboti — oxirgi hisobotdan keyingi muddati tugagan testlar (PDF jadval)\n"
+        "🖥 Admin panel — o'quvchilar nazorati va 📊 Hisobotlar (har bir test/davomatni necha kishi qilgani)\n"
         + boss_lines +
         "🗑 Foydalanuvchini o'chirish — /delete &lt;telegram_id&gt;\n"
         "👮 Adminlar — adminlar ro'yxati\n"

@@ -308,8 +308,7 @@ async def _run_attendance_session(bot, session_id: int, warning_minutes: int, re
                 pass
 
     # Muddat tugagach hisobot endi adminlarga AVTOMATIK yuborilmaydi: Boss/adminlar
-    # "📋 Davomat hisoboti" tugmasi (handlers/reports.py) orqali xohlagan payti,
-    # oxirgi olgan hisobotidan keyingi barcha yakunlangan davomatlarni oladi.
+    # Mini App panelidagi "📊 Hisobotlar" bo'limida har bir davomatda necha kishi qatnashgani ko'rinadi.
 
 
 @router.startup()

@@ -8,8 +8,6 @@ from locations import REGIONS
 # u "noto'g'ri qiymat" xatoligi sifatida qabul qilinib, navigatsiya buziladi.
 ADMIN_MENU_TEXTS = {
     "🖥 Admin panel",
-    "📋 Davomat hisoboti",
-    "🧾 Test hisoboti",
     "📊 Statistika",
     "👥 Foydalanuvchilar",
     "🗑 Foydalanuvchini o'chirish",
@@ -117,10 +115,6 @@ def admin_menu_keyboard(user_id=None, force_panel=False):
     return ReplyKeyboardMarkup(
         keyboard=panel_row + [
             [
-                KeyboardButton(text="📋 Davomat hisoboti"),
-                KeyboardButton(text="🧾 Test hisoboti"),
-            ],
-            [
                 KeyboardButton(text="🗑 Foydalanuvchini o'chirish"),
                 KeyboardButton(text="👮 Adminlar"),
             ],
@@ -155,11 +149,11 @@ def boss_menu_keyboard():
     from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
     base = admin_menu_keyboard(force_panel=True)
     # "📊 Statistika" va "👥 Foydalanuvchilar" faqat Boss menyusida (adminlardan olib tashlangan):
-    # hisobot tugmalari qatoridan keyin joylashtiriladi.
+    # "Admin panel" qatoridan keyin joylashtiriladi.
     rows = list(base.keyboard)
     stats_row = [KeyboardButton(text="📊 Statistika"), KeyboardButton(text="👥 Foydalanuvchilar")]
     insert_at = next(
-        (i + 1 for i, row in enumerate(rows) if any(b.text == "📋 Davomat hisoboti" for b in row)),
+        (i + 1 for i, row in enumerate(rows) if any(b.text == "🖥 Admin panel" for b in row)),
         0,
     )
     rows.insert(insert_at, stats_row)
