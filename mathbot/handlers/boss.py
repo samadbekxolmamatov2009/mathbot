@@ -721,7 +721,7 @@ async def boss_show_joke(message: Message):
         f"📅 Yuboriladi: {when}\n"
         f"🎨 Stiker: {'bor' if sticker else 'yo‘q (botga stiker yuboring)'}\n\n"
         f"{JOKES[index]}\n\n"
-        "Hozir guruhga yuborish: /hazil_yubor",
+        "Hozir guruhga yuborish: /hazil_yubor\nKeyingi hazilni almashtirish: /hazil_change",
         parse_mode="HTML",
     )
     if sticker:
@@ -729,6 +729,55 @@ async def boss_show_joke(message: Message):
             await message.answer_sticker(sticker)
         except Exception:
             pass
+
+
+@router.message(Command("hazil_change"), F.chat.type == "private")
+async def boss_change_joke(message: Message, command: CommandObject):
+    """Navbatdagi (keyingi yuboriladigan) hazilni tanlash. Yuborilgach navbat tanlanganning
+    keyingisiga o'tadi. /hazil_change - ro'yxat (tugmalar), /hazil_change 4 - to'g'ridan-to'g'ri."""
+    if not is_boss(message.from_user.id):
+        return
+    from config import JOKES
+    arg = (command.args or "").strip()
+    if arg:
+        if not arg.isdigit() or not 1 <= int(arg) <= len(JOKES):
+            await message.answer(f"Hazil raqami 1 dan {len(JOKES)} gacha bo'lishi kerak. Masalan: /hazil_change 4")
+            return
+        await _set_next_joke(message, int(arg) - 1)
+        return
+    current = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
+    rows = [
+        [InlineKeyboardButton(
+            text=("✅ " if i == current else "") + f"{i + 1}. " + j.replace("\n", " ")[:45],
+            callback_data=f"jokeset:{i}")]
+        for i, j in enumerate(JOKES)
+    ]
+    await message.answer(
+        "Keyingi safar qaysi hazil yuborilsin? Tanlang (✅ - hozirgi navbat):",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=rows),
+    )
+
+
+async def _set_next_joke(message: Message, index: int):
+    from config import JOKES
+    await db.set_setting("joke_index", str(index))
+    await message.answer(
+        f"✅ Keyingi hazil: <b>{index + 1}-chi</b>. Vaqti kelganda shu yuboriladi "
+        f"(keyin navbat {(index + 1) % len(JOKES) + 1}-chiga o'tadi).\n\n{JOKES[index]}\n\n"
+        "Qanday yuborilishini ko'rish: /hazil",
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data.startswith("jokeset:"))
+async def boss_change_joke_pick(callback: CallbackQuery):
+    if not is_boss(callback.from_user.id):
+        await callback.answer()
+        return
+    from config import JOKES
+    index = int(callback.data.split(":", 1)[1]) % len(JOKES)
+    await callback.answer("Saqlandi")
+    await _set_next_joke(callback.message, index)
 
 
 @router.message(Command("hazil_yubor"), F.chat.type == "private")
