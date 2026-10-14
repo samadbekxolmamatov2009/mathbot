@@ -1244,6 +1244,79 @@ _GROUP_ERRORS = (
 )
 
 
+_IN_GROUP_STATUSES = ("creator", "administrator", "member", "restricted")
+
+
+async def _is_in_group(chat_id, telegram_id) -> bool | None:
+    """Guruhda bormi: True/False; Telegram javob bermasa None. 'restricted' faqat is_member bo'lsa."""
+    try:
+        res = await _telegram_api("getChatMember", {"chat_id": chat_id, "user_id": telegram_id})
+    except (aiohttp.ClientError, asyncio.TimeoutError):
+        return None
+    if not res.get("ok"):
+        desc = str(res.get("description", "")).lower()
+        if "user not found" in desc or "participant_id_invalid" in desc:
+            return False
+        return None
+    m = res.get("result", {})
+    status = m.get("status")
+    if status == "restricted":
+        return bool(m.get("is_member", True))
+    return status in _IN_GROUP_STATUSES
+
+
+async def group_status_handler(request: web.Request):
+    """O'quvchilar guruhda bormi-yo'qmi (faqat shu; telefon va boshqa ma'lumot yo'q).
+    `Authorization: Bearer <USERS_API_KEY>` kerak; USERS_API_KEY env o'rnatilmasa endpoint o'chiq.
+    ?telegram_id=123 - bitta odam; usiz - ro'yxatdan o'tgan hamma o'quvchi.
+    ?course=turbo - kursga filtr (guruh ham shu kursniki olinadi)."""
+    key = os.getenv("USERS_API_KEY", "").strip()
+    if not key:
+        return web.json_response({"error": "disabled"}, status=404)
+    auth = request.headers.get("Authorization", "")
+    given = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    if not hmac.compare_digest(given.encode(), key.encode()):
+        return web.json_response({"error": "unauthorized"}, status=401)
+
+    users = await db.get_all_users()
+    one = request.query.get("telegram_id")
+    if one:
+        try:
+            one = int(one)
+        except ValueError:
+            return web.json_response({"error": "bad_request"}, status=400)
+        users = [u for u in users if u["telegram_id"] == one]
+    course = request.query.get("course")
+    if course:
+        users = [u for u in users if u["course"] == course]
+
+    sem = asyncio.Semaphore(10)
+    chats: dict = {}
+
+    async def chat_of(course_key):
+        if course_key not in chats:
+            chats[course_key] = await db.get_setting(f"subscription_channel_{course_key}") or \
+                config.COURSES.get(course_key, {}).get("channel")
+        return chats[course_key]
+
+    async def check(u):
+        chat = await chat_of(u["course"])
+        if not chat:
+            return {"telegram_id": u["telegram_id"], "full_name": u["full_name"], "in_group": None}
+        async with sem:
+            ok = await _is_in_group(chat, u["telegram_id"])
+        return {"telegram_id": u["telegram_id"], "full_name": u["full_name"], "in_group": ok}
+
+    result = await asyncio.gather(*[check(u) for u in users])
+    return web.json_response({
+        "count": len(result),
+        "in_group": sum(1 for r in result if r["in_group"] is True),
+        "not_in_group": sum(1 for r in result if r["in_group"] is False),
+        "unknown": sum(1 for r in result if r["in_group"] is None),
+        "users": result,
+    })
+
+
 async def _kick_from_chat(chat_id, telegram_id) -> str | None:
     """Chatdan chiqaradi (ban + darrov unban: abadiy bloklanmaydi). Xato kodini yoki None qaytaradi."""
     try:
@@ -1431,6 +1504,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/aplus/test_by_id/{id}/update", aplus_update_test_handler)
     app.router.add_get("/api/aplus/test/{code}/status", aplus_test_status_handler)
     app.router.add_post("/api/aplus/test/{code}/submit", aplus_submit_handler)
+    app.router.add_get("/api/group_status", group_status_handler)
     app.router.add_get("/api/panel/summary", panel_summary_handler)
     app.router.add_get("/api/panel/students", panel_students_handler)
     app.router.add_get("/api/panel/student/{id}", panel_student_handler)
