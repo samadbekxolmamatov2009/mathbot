@@ -887,6 +887,23 @@ async def aplus_update_test_handler(request: web.Request):
     return web.json_response({"code": test["code"], "regrade": regrade})
 
 
+async def aplus_check_answer_handler(request: web.Request):
+    """Klaviatura sinovi sahifasi uchun: ikkita javob (to'g'ri va o'quvchi) bir xil hisoblanadimi.
+    Faqat adminlar (Telegram initData sarlavhada)."""
+    user = verify_init_data(request.headers.get("X-Init-Data", ""))
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+    if not is_admin(user["id"]):
+        return web.json_response({"error": "not_admin"}, status=403)
+    try:
+        body = await request.json()
+        correct = str(body.get("correct", ""))[:200]
+        submitted = str(body.get("submitted", ""))[:200]
+    except (ValueError, json.JSONDecodeError):
+        return web.json_response({"error": "bad_request"}, status=400)
+    return web.json_response({"equivalent": answers_equivalent(correct, submitted)})
+
+
 async def aplus_test_status_handler(request: web.Request):
     code = request.match_info["code"]
     test = await db.get_aplus_test_by_code(code)
@@ -1518,6 +1535,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/aplus/create_test", aplus_create_test_handler)
     app.router.add_get("/api/aplus/test_by_id/{id}", aplus_get_edit_data_handler)
     app.router.add_post("/api/aplus/test_by_id/{id}/update", aplus_update_test_handler)
+    app.router.add_post("/api/aplus/check_answer", aplus_check_answer_handler)
     app.router.add_get("/api/aplus/test/{code}/status", aplus_test_status_handler)
     app.router.add_post("/api/aplus/test/{code}/submit", aplus_submit_handler)
     app.router.add_get("/api/group_status", group_status_handler)

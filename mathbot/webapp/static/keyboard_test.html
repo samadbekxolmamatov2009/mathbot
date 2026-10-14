@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="uz">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Klaviatura sinovi</title>
+<link rel="stylesheet" href="/style.css?v=4" />
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  body { padding: 16px 16px 40px; }
+  h1 { font-size: 20px; margin: 4px 0 4px; }
+  p.sub { color: var(--hint); font-size: 13px; margin: 0 0 14px; }
+  .box { background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; margin-bottom: 12px; }
+  .box label { display: block; font-size: 12px; font-weight: 700; color: var(--hint); margin-bottom: 6px; }
+  .plain { font-family: ui-monospace, monospace; font-size: 13px; margin-top: 6px; color: var(--hint); word-break: break-all; }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .presets button { border: 1px solid var(--border); background: var(--card-bg); color: var(--text); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .go { width: 100%; padding: 14px; border: 0; border-radius: 12px; background: var(--accent); color: var(--accent-text); font-size: 16px; font-weight: 800; }
+  .verdict { margin-top: 14px; padding: 14px; border-radius: 12px; font-size: 16px; font-weight: 800; text-align: center; display: none; }
+  .verdict.ok { display: block; background: #e3f6ec; color: #17a05b; }
+  .verdict.bad { display: block; background: #fdeceb; color: #e5484d; }
+</style>
+</head>
+<body>
+  <h1>⌨ A+ klaviatura sinovi</h1>
+  <p class="sub">Admin to'g'ri javobni, o'quvchi o'z javobini qanday kiritsa — shu yerda yozib, bir xil hisoblanishini tekshiring.</p>
+
+  <div class="presets" id="presets"></div>
+
+  <div class="box">
+    <label>To'g'ri javob (admin kiritgandek)</label>
+    <div id="correctMount"></div>
+    <div class="plain" id="correctPlain"></div>
+  </div>
+  <div class="box">
+    <label>O'quvchi javobi</label>
+    <div id="studentMount"></div>
+    <div class="plain" id="studentPlain"></div>
+  </div>
+
+  <button class="go" id="goBtn" type="button">Tekshirish</button>
+  <div class="verdict" id="verdict"></div>
+
+  <script src="/math_input.js?v=1"></script>
+  <script>
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg) { tg.ready(); tg.expand(); }
+
+    const PRESETS = [["0.5", "1/2"], ["3/4", "0.75"], ["√12", "2√3"], ["1/2", "1/3"], ["π", "3.14159"]];
+    let correct, student;
+
+    function setField(f, plain) {
+      if (f.isMath) f.el.value = plainToLatex(plain); else f.el.value = plain;
+      refresh();
+    }
+
+    function refresh() {
+      document.getElementById("correctPlain").textContent = "Serverga ketadi: " + (correct.getPlain() || "—");
+      document.getElementById("studentPlain").textContent = "Serverga ketadi: " + (student.getPlain() || "—");
+    }
+
+    async function check() {
+      const verdict = document.getElementById("verdict");
+      verdict.className = "verdict";
+      verdict.style.display = "none";
+      try {
+        const res = await fetch("/api/aplus/check_answer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Init-Data": tg ? tg.initData : "" },
+          body: JSON.stringify({ correct: correct.getPlain(), submitted: student.getPlain() }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || res.status);
+        verdict.textContent = data.equivalent ? "✅ To'g'ri hisoblanadi" : "❌ Noto'g'ri hisoblanadi";
+        verdict.className = "verdict " + (data.equivalent ? "ok" : "bad");
+      } catch (e) {
+        verdict.textContent = "⚠️ Tekshirib bo'lmadi: " + e.message;
+        verdict.className = "verdict bad";
+      }
+    }
+
+    (async function init() {
+      await mathLiveReady();
+      correct = createAnswerField({ placeholder: "To'g'ri javob", onChange: refresh });
+      student = createAnswerField({ placeholder: "O'quvchi javobi", onChange: refresh });
+      document.getElementById("correctMount").appendChild(correct.el);
+      document.getElementById("studentMount").appendChild(student.el);
+      PRESETS.forEach(([a, b]) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = a + "  ↔  " + b;
+        btn.addEventListener("click", () => { setField(correct, a); setField(student, b); });
+        document.getElementById("presets").appendChild(btn);
+      });
+      document.getElementById("goBtn").addEventListener("click", check);
+      refresh();
+    })();
+  </script>
+</body>
+</html>
