@@ -878,3 +878,30 @@ button {
   line-height: 1;
   cursor: pointer;
 }
+
+/* ===== MathLive maydoni (A+ javoblar) ===== */
+math-field.aplus-input {
+  display: block;
+  height: auto;
+  min-height: 44px;
+  font-size: 20px;
+  cursor: text;
+  user-select: auto;
+  -webkit-user-select: auto;
+  overflow: visible;
+  --hue: 230;
+  --text-font-family: inherit;
+  --keyboard-zindex: 1000;
+}
+math-field.aplus-input:focus-within {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  outline: none;
+}
+math-field.aplus-input::part(menu-toggle) { display: none; }
+input.aplus-input-plain {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  font-size: 16px;
+}

@@ -1898,3 +1898,57 @@ async def get_report_submission_scores(kind: str, test_ids):
             tuple(test_ids),
         ) as cursor:
             return {(r[0], r[1]): r[2] for r in await cursor.fetchall()}
+
+
+_PANEL_REPORT_KINDS = {
+    # kind: (jadval, ustunlar, qatnashish jadvali, tashqi kalit, ball ifodasi)
+    "tests": ("tests", "t.id, t.code, t.name, t.created_at, t.end_time, t.is_active",
+              "test_submissions", "test_id", "AVG(s.score)"),
+    "aplus": ("aplus_tests", "t.id, t.code, t.name, t.created_at, t.end_time, t.is_active",
+              "aplus_submissions", "test_id", "AVG(s.score)"),
+    "attendance": ("attendance_sessions", "t.id, t.code, NULL, t.created_at, NULL, t.is_active",
+                   "attendance_records", "session_id", "NULL"),
+}
+
+
+async def get_panel_reports(kind: str, limit: int = 30, offset: int = 0):
+    """Panel "Hisobotlar" bo'limi: har bir test/davomat uchun UMUMIY sonlar (o'quvchilar ro'yxatisiz).
+    kind: 'tests' | 'aplus' | 'attendance'. done - ishlaganlar/qatnashganlar, total - o'sha payt
+    ro'yxatdan o'tgan o'quvchilar (keyin ro'yxatdan o'tganlar hisobga olinmaydi), avg - o'rtacha ball.
+    Qaytaradi: (elementlar - yangisi birinchi, jami elementlar soni)."""
+    table, cols, sub_table, fk, score = _PANEL_REPORT_KINDS[kind]
+    now_str = _now_deadline_str()
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(f"SELECT COUNT(*) FROM {table}") as c:
+            total_items = (await c.fetchone())[0]
+        async with db.execute(
+            f"SELECT {cols} FROM {table} t ORDER BY t.id DESC LIMIT ? OFFSET ?", (limit, offset)
+        ) as c:
+            rows = await c.fetchall()
+        items = []
+        for tid, code, name, created_at, end_time, is_active in rows:
+            async with db.execute(
+                f"SELECT COUNT(*), {score} FROM {sub_table} s "
+                f"JOIN users u ON u.telegram_id = s.telegram_id "
+                f"WHERE s.{fk} = ? AND u.is_registered = 1 "
+                f"AND (u.registered_at IS NULL OR u.registered_at <= ?)",
+                (tid, created_at),
+            ) as c:
+                done, avg = await c.fetchone()
+            async with db.execute(
+                "SELECT COUNT(*) FROM users WHERE is_registered = 1 "
+                "AND (registered_at IS NULL OR registered_at <= ?)",
+                (created_at,),
+            ) as c:
+                total = (await c.fetchone())[0]
+            if kind == "attendance":
+                finished = not is_active
+            else:
+                finished = (not end_time) or str(end_time) <= now_str
+            items.append({
+                "id": tid, "code": code, "name": name, "created_at": created_at,
+                "done": done or 0, "total": total,
+                "avg": round(avg, 1) if avg is not None else None,
+                "finished": bool(finished),
+            })
+    return items, total_items

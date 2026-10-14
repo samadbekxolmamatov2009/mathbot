@@ -43,7 +43,7 @@ async def keep_webapp_alive_loop():
             await asyncio.sleep(KEEP_ALIVE_INTERVAL_SECONDS)
 import database as db
 from database import init_db
-from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss, reports
+from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
 from middlewares import SubscriptionCheckMiddleware
 from pdf_report import generate_period_report, generate_test_results_report
 from quiz_structure import DEFAULT_TOTAL_QUESTIONS
@@ -266,9 +266,6 @@ async def main():
     logging.basicConfig(level=logging.INFO)
 
     await init_db()
-    # "Davomat/Test hisoboti" tugmalari uchun boshlang'ich belgi (bir marta): hisobotlar
-    # shu paytdan keyin yakunlangan davomat/testlardan boshlanadi.
-    await db.ensure_report_baselines()
 
     # "admins" jadvali - ADMIN_IDS ro'yxatining o'zagida, shuning uchun
     # boshqa modullardagi "from config import ADMIN_IDS" ham darhol yangi
@@ -331,7 +328,6 @@ async def main():
     # Admin handlerlari registration'dan oldin bo'lishi kerak
     # (chunki /start admin uchun boshqacha ishlaydi)
     dp.include_router(admin.router)
-    dp.include_router(reports.router)
     dp.include_router(registration.router)
     dp.include_router(attendance.router)
     dp.include_router(tests.router)
@@ -343,9 +339,8 @@ async def main():
     await start_webapp_server()
     asyncio.create_task(keep_webapp_alive_loop())
     asyncio.create_task(send_report_schedule_loop(bot))
-    # Test/A+ natijalari endi har bir test tugaganda avtomatik yuborilmaydi -
-    # Boss/adminlar "🧾 Test hisoboti" tugmasi orqali o'zlari olishadi
-    # (send_test_results_loop / send_aplus_results_loop shuning uchun ishga tushirilmaydi).
+    # Test/A+ natijalari avtomatik yuborilmaydi - Mini App panelidagi "Hisobotlar"
+    # bo'limida umumiy sonlar ko'rinadi (send_test_results_loop / send_aplus_results_loop ishga tushirilmaydi).
     asyncio.create_task(send_broadcast_schedule_loop(bot))
     asyncio.create_task(notify_new_activities_loop(bot))
     await dp.start_polling(bot)

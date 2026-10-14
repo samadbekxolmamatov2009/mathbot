@@ -359,7 +359,78 @@
 
   moreBtn.addEventListener("click", function () { loadStudents(false); });
   $("retryBtn").addEventListener("click", refreshAll);
-  $("refreshBtn").addEventListener("click", function () { haptic(); refreshAll(); });
+  $("refreshBtn").addEventListener("click", function () {
+    haptic();
+    if (!$("reportsView").hidden) { loadReports(true); return; }
+    refreshAll();
+  });
+
+  // ---------- Hisobotlar bo'limi (testlar / A+ / davomat: faqat umumiy sonlar) ----------
+  var rep = { kind: "tests", offset: 0, total: 0, loading: false, req: 0, loaded: false };
+
+  function fmtDate(v) {
+    var m = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
+    if (!m) return "";
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) + 5 * 3600 * 1000);   // UTC -> Toshkent
+    var p = function (n) { return (n < 10 ? "0" : "") + n; };
+    return p(d.getUTCDate()) + "." + p(d.getUTCMonth() + 1) + " " + p(d.getUTCHours()) + ":" + p(d.getUTCMinutes());
+  }
+
+  function repCard(it) {
+    var att = rep.kind === "attendance";
+    var title = att ? "Davomat" : (it.name || "Test");
+    title += " · kod " + it.code;
+    var pct = it.total ? Math.round(it.done * 100 / it.total) : 0;
+    var note = (att ? "qatnashdi" : "ishladi") + " · " + pct + "%";
+    if (!att && it.avg != null) note += " · o'rtacha ball " + it.avg;
+    if (!it.finished) note += " · davom etmoqda";
+    return '<div class="rep-card"><div class="rep-top"><span class="rep-title">' + esc(title) +
+      '</span><span class="rep-date">' + esc(fmtDate(it.created_at)) + '</span></div>' +
+      '<div class="rep-nums"><span class="rep-count">' + it.done + '<small> / ' + it.total + '</small></span>' +
+      '<span class="rep-note">' + esc(note) + '</span></div>' +
+      '<div class="rep-bar"><i style="width:' + pct + '%"></i></div></div>';
+  }
+
+  function loadReports(reset) {
+    if (rep.loading && !reset) return;
+    if (reset) { rep.offset = 0; rep.req++; }
+    var req = rep.req, list = $("reportsList"), more = $("reportsMore");
+    rep.loading = true; more.disabled = true;
+    if (reset) { list.innerHTML = ""; $("reportsEmpty").hidden = true; }
+    return api("/api/panel/reports?kind=" + rep.kind + "&limit=" + PAGE + "&offset=" + rep.offset).then(function (data) {
+      if (req !== rep.req) return;
+      list.insertAdjacentHTML("beforeend", data.items.map(repCard).join(""));
+      rep.offset += data.items.length; rep.total = data.total;
+      $("reportsEmpty").hidden = rep.total > 0;
+      more.hidden = rep.offset >= rep.total;
+    }).catch(function (e) {
+      if (req !== rep.req) return;
+      haptic("err"); toast("Hisobotni yuklab bo'lmadi");
+    }).then(function () {
+      if (req === rep.req) { rep.loading = false; more.disabled = false; }
+    });
+  }
+
+  function showView(reports) {
+    $("studentsView").hidden = reports;
+    $("reportsView").hidden = !reports;
+    $("tabStudents").classList.toggle("is-on", !reports);
+    $("tabReports").classList.toggle("is-on", reports);
+    $("tabStudents").setAttribute("aria-selected", String(!reports));
+    $("tabReports").setAttribute("aria-selected", String(reports));
+    if (reports && !rep.loaded) { rep.loaded = true; loadReports(true); }
+  }
+  $("tabStudents").addEventListener("click", function () { haptic(); showView(false); });
+  $("tabReports").addEventListener("click", function () { haptic(); showView(true); });
+  $("reportsMore").addEventListener("click", function () { loadReports(false); });
+  document.querySelectorAll("[data-rkind]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      rep.kind = b.getAttribute("data-rkind"); haptic();
+      document.querySelectorAll("[data-rkind]").forEach(function (x) { x.classList.toggle("is-on", x === b); });
+      loadReports(true);
+    });
+  });
+
 
   // Ro'yxatdagi kartani bosish -> profil
   listEl.addEventListener("click", function (e) {

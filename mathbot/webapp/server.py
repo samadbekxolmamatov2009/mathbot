@@ -1098,6 +1098,22 @@ async def panel_summary_handler(request: web.Request):
     return web.json_response(await db.get_panel_summary(last_session_id))
 
 
+async def panel_reports_handler(request: web.Request):
+    """Hisobotlar: testlar / A+ / davomatlar bo'yicha umumiy sonlar (kim ishlagani ko'rsatilmaydi)."""
+    _, err = _panel_user(request)
+    if err:
+        return err
+    kind = request.query.get("kind", "tests")
+    if kind not in ("tests", "aplus", "attendance"):
+        return web.json_response({"error": "bad_request"}, status=400)
+    items, total = await db.get_panel_reports(
+        kind,
+        limit=_int_param(request, "limit", 30, 1, 100),
+        offset=_int_param(request, "offset", 0, 0, 1_000_000),
+    )
+    return web.json_response({"items": items, "total": total})
+
+
 async def panel_students_handler(request: web.Request):
     _, err = _panel_user(request)
     if err:
@@ -1506,6 +1522,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/aplus/test/{code}/submit", aplus_submit_handler)
     app.router.add_get("/api/group_status", group_status_handler)
     app.router.add_get("/api/panel/summary", panel_summary_handler)
+    app.router.add_get("/api/panel/reports", panel_reports_handler)
     app.router.add_get("/api/panel/students", panel_students_handler)
     app.router.add_get("/api/panel/student/{id}", panel_student_handler)
     app.router.add_get("/api/panel/student/{id}/{section}", panel_student_section_handler)

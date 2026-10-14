@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 <meta name="color-scheme" content="light dark" />
 <title>Admin panel</title>
-<link rel="stylesheet" href="/panel.css?v=4" />
+<link rel="stylesheet" href="/panel.css?v=5" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -32,7 +32,29 @@
       </div>
     </header>
 
-    <main class="content">
+    <nav class="tabs" role="tablist" aria-label="Bo'limlar">
+      <button class="tab is-on" id="tabStudents" type="button" role="tab" aria-selected="true">👥 O'quvchilar</button>
+      <button class="tab" id="tabReports" type="button" role="tab" aria-selected="false">📊 Hisobotlar</button>
+    </nav>
+
+    <!-- Hisobotlar: testlar va davomatlar bo'yicha UMUMIY sonlar (o'quvchilar ro'yxatisiz) -->
+    <main class="content" id="reportsView" hidden>
+      <div class="chips" role="group" aria-label="Hisobot turi">
+        <button class="chip is-on" data-rkind="tests" type="button">🧾 Testlar</button>
+        <button class="chip" data-rkind="aplus" type="button">🅰️ A+ testlar</button>
+        <button class="chip" data-rkind="attendance" type="button">📅 Davomat</button>
+      </div>
+      <section class="list" id="reportsList" aria-live="polite"></section>
+      <div class="state" id="reportsEmpty" hidden>
+        <div class="state-icon">📭</div>
+        <h3>Hozircha yo'q</h3>
+      </div>
+      <div class="more-wrap">
+        <button class="btn btn-soft" id="reportsMore" type="button" hidden>Yana ko'rish</button>
+      </div>
+    </main>
+
+    <main class="content" id="studentsView">
 
       <!-- Umumiy ko'rsatkichlar -->
       <section class="stats" id="stats" aria-label="Umumiy ko'rsatkichlar">
@@ -122,6 +144,6 @@
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="/panel.js?v=11"></script>
+  <script src="/panel.js?v=12"></script>
 </body>
 </html>
