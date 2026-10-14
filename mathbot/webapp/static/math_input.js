@@ -31,6 +31,8 @@
     geq: "≥", ge: "≥", approx: "≈", lt: "<", gt: ">", degree: "°", circ: "°", in: "∈", notin: "∉",
     cup: "∪", cap: "∩", subset: "⊂", emptyset: "∅", varnothing: "∅", to: "→", rightarrow: "→",
     lbrace: "{", rbrace: "}", lbrack: "[", rbrack: "]", vert: "|", lvert: "|", rvert: "|", ldots: "...", dots: "...",
+    exponentialE: "e", imaginaryI: "i", differentialD: "d", forall: "∀", exists: "∃", Rightarrow: "⇒", Leftrightarrow: "⇔", leftrightarrow: "↔",
+    colon: ":", mid: "|", prime: "'", ast: "*", leqslant: "≤", geqslant: "≥", setminus: "\\",
     "%": "%", "&": "&", "$": "$", "#": "#", "_": "_", "{": "{", "}": "}", "|": "|", "\\": "",
   };
   var SKIP = {
