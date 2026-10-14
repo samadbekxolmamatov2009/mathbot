@@ -51,6 +51,11 @@ def can_use_panel(user_id) -> bool:
 PANEL_REMOVE_FOR_ADMINS = os.getenv("PANEL_REMOVE_FOR_ADMINS", "").strip().lower() in ("1", "true", "yes", "on")
 
 
+# Faqat o'quvchilarni CHIQARISH uchun ulangan qo'shimcha yopiq kanal (hisobot/hazillar bu yerga
+# bormaydi). Boss botda /ochirish_kanal orqali sozlaydi; yoki env REMOVAL_CHANNEL_ID.
+REMOVAL_CHANNEL_ID = os.getenv("REMOVAL_CHANNEL_ID", "").strip()
+
+
 def can_remove_student(user_id) -> bool:
     return is_boss(user_id) or (PANEL_REMOVE_FOR_ADMINS and can_use_panel(user_id))
 

@@ -657,6 +657,11 @@
     target_admin: "Bu odam guruhda admin yoki egasi — chiqarib bo'lmaydi.",
     chat_not_found: "Guruh topilmadi (kurs uchun belgilangan kanal/guruh noto'g'ri).",
     group_failed: "Guruhdan chiqarib bo'lmadi.",
+    extra_no_rights: "Guruhdan chiqarildi, lekin yopiq kanalda bot admin emas yoki \"Ban users\" huquqi yo'q. Hech narsa o'chmadi.",
+    extra_target_admin: "Bu odam yopiq kanalda admin yoki egasi — chiqarib bo'lmaydi.",
+    extra_chat_not_found: "Yopiq kanal topilmadi (ID noto'g'ri yoki bot kanalda yo'q). Hech narsa o'chmadi.",
+    extra_group_failed: "Yopiq kanaldan chiqarib bo'lmadi. Hech narsa o'chmadi.",
+    extra_telegram_unreachable: "Yopiq kanal uchun Telegram bilan bog'lanib bo'lmadi. Qayta urinib ko'ring.",
     protected: "Admin yoki Boss'ni o'chirib bo'lmaydi.",
     not_allowed: "Sizda bu amal uchun ruxsat yo'q.",
     telegram_unreachable: "Telegram bilan bog'lanib bo'lmadi. Qayta urinib ko'ring.",
@@ -667,7 +672,7 @@
     err.hidden = true;
     var question = (s.full_name || "O'quvchi") + (skipGroup
       ? " faqat BOTdan o'chiriladi (guruhda qoladi). Davom etasizmi?"
-      : " BOTdan ham, GURUHdan ham o'chiriladi. Bu amalni qaytarib bo'lmaydi. Davom etasizmi?");
+      : " BOTdan ham, GURUH (va yopiq kanal)dan ham o'chiriladi. Bu amalni qaytarib bo'lmaydi. Davom etasizmi?");
     var go = function () {
       var id = s.telegram_id, btn = $("removeBtn");
       btn.disabled = true; btn.textContent = "O'chirilmoqda...";
@@ -676,7 +681,7 @@
         .then(function (data) {
           haptic("ok");
           var g = data.group === "removed" ? "guruhdan ✓" : (data.group === "skipped" ? "guruhga tegilmadi" : "guruh sozlanmagan");
-          toast("O'chirildi: botdan ✓, " + g);
+          toast("O'chirildi: botdan ✓, " + g + (data.channel === "removed" ? ", kanaldan ✓" : ""));
           var card = document.querySelector('.card[data-id="' + id + '"]');
           if (card) { card.remove(); state.total = Math.max(0, state.total - 1); state.offset = Math.max(0, state.offset - 1); }
           current = null; sheet.hidden = true; backdrop.hidden = true; document.body.classList.remove("sheet-open");
@@ -689,7 +694,7 @@
           err.textContent = REMOVE_ERRORS[e.message] || "O'chirib bo'lmadi. Qayta urinib ko'ring.";
           err.hidden = false;
           // guruh bilan muammo bo'lsa - faqat botdan o'chirish imkoniyatini taklif qilamiz
-          if (!skipGroup && ["no_rights", "chat_not_found", "group_failed", "telegram_unreachable"].indexOf(e.message) >= 0) {
+          if (!skipGroup && ["no_rights", "chat_not_found", "group_failed", "telegram_unreachable", "extra_no_rights", "extra_chat_not_found", "extra_group_failed", "extra_telegram_unreachable"].indexOf(e.message) >= 0) {
             $("removeBotOnlyBtn").hidden = false;
           }
           btn.disabled = false; btn.textContent = "🚪 O'qimayman — botdan va guruhdan o'chirish";

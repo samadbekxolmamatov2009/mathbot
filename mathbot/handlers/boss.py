@@ -615,6 +615,65 @@ async def boss_set_chat(callback: CallbackQuery):
     await _set_subscription_chat_silent(callback.bot, chat, callback.from_user.id)
 
 
+# ---------- Faqat o'quvchi chiqarish uchun yopiq kanal: /ochirish_kanal ----------
+# Hisobot/hazillar bu kanalga BORMAYDI; panelda "o'chirish" bosilganda o'quvchi
+# guruhdan va shu kanaldan ham chiqariladi. Bot kanalda admin ("Ban users") bo'lishi shart.
+
+@router.message(Command("ochirish_kanal"), F.chat.type == "private")
+async def boss_removal_channel(message: Message, command: CommandObject):
+    if not is_boss(message.from_user.id):
+        return
+    arg = (command.args or "").strip()
+    current = await db.get_setting("removal_channel_id")
+    if arg.lower() in ("yoq", "yo'q", "off", "0"):
+        await db.set_setting("removal_channel_id", "")
+        await message.answer("Yopiq kanal o'chirildi: endi o'quvchilar faqat guruhdan chiqariladi.")
+        return
+    if arg.lstrip("-").isdigit():
+        chat_id = int(arg)
+        try:
+            chat = await message.bot.get_chat(chat_id)
+            me = await message.bot.get_chat_member(chat_id, message.bot.id)
+        except Exception as e:
+            await message.answer(f"❌ Bot bu kanalga kira olmayapti: {e}\nBotni kanalga admin qiling va ID ni tekshiring.")
+            return
+        await db.set_setting("removal_channel_id", str(chat_id))
+        warn = "" if getattr(me, "can_restrict_members", False) else \
+            "\n⚠️ Bot admin, lekin «Ban users» (a'zolarni cheklash) huquqi yo'q — yoqing."
+        await message.answer(f"✅ Yopiq kanal saqlandi: {chat.title or chat_id} (<code>{chat_id}</code>){warn}", parse_mode="HTML")
+        return
+    try:
+        seen = _json.loads(await db.get_setting("seen_chats") or "{}")
+    except ValueError:
+        seen = {}
+    text = (
+        "Yopiq kanal ID sini yozing: <code>/ochirish_kanal -1001234567890</code>\n"
+        "O'chirish: <code>/ochirish_kanal yoq</code>\n"
+        f"Hozirgi: <code>{current or 'sozlanmagan'}</code>"
+    )
+    rows = [[InlineKeyboardButton(text=("✅ " if cid == str(current) else "") + t[:50], callback_data=f"setrm:{cid}")]
+            for cid, t in seen.items()]
+    if rows:
+        text += "\n\nYoki bot ko'rgan chatlardan tanlang:"
+    await message.answer(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None)
+
+
+@router.callback_query(F.data.startswith("setrm:"))
+async def boss_set_removal_channel(callback: CallbackQuery):
+    if not is_boss(callback.from_user.id):
+        await callback.answer()
+        return
+    chat_id = int(callback.data.split(":", 1)[1])
+    try:
+        chat = await callback.bot.get_chat(chat_id)
+    except Exception as e:
+        await callback.answer(f"Bot bu chatga kira olmayapti: {e}", show_alert=True)
+        return
+    await db.set_setting("removal_channel_id", str(chat_id))
+    await callback.answer("Saqlandi")
+    await callback.message.answer(f"✅ Yopiq kanal: {chat.title or chat_id} (<code>{chat_id}</code>)", parse_mode="HTML")
+
+
 # ---------- Hazillar: /hazil va /hazil_yubor ----------
 
 def _next_joke_time(now, sent_today: bool):
