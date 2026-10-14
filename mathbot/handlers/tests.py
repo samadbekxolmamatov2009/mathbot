@@ -46,7 +46,7 @@ def _regrade_line(payload: dict) -> str:
         f"hisoblandi ({regrade.get('changed', 0)} tasining bali o'zgardi).\n\n"
     )
 
-@router.message(F.text == "📝 Javoblarni yozish")
+@router.message(F.text.in_({"📝 Test yaratish", "📝 Javoblarni yozish"}))
 async def open_admin_test_app(message: Message):
     if not is_admin(message.from_user.id):
         return
@@ -64,7 +64,7 @@ async def open_admin_test_app(message: Message):
         ]
     )
     await message.answer(
-        "Quyidagi tugma orqali 35 ta savolning to'g'ri javoblarini belgilang.\n"
+        "Quyidagi tugma orqali 30 ta savolning to'g'ri javoblarini belgilang.\n"
         "Tasdiqlagach, sizga test kodi beriladi.",
         reply_markup=kb,
     )
