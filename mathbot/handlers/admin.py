@@ -281,6 +281,29 @@ def _broadcast_status_kb(count: int) -> InlineKeyboardMarkup:
     )
 
 
+@router.message(Command("klaviatura_sinov"), F.chat.type == "private")
+async def keyboard_test_command(message: Message):
+    """A+ klaviaturasini telefonda sinash: ikki javobni (masalan 0.5 va 1/2) yozib, bir xil
+    hisoblanishini ko'rish. Faqat adminlar."""
+    if not is_admin(message.from_user.id):
+        return
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[[
+            InlineKeyboardButton(
+                text="⌨ Klaviaturani sinash",
+                web_app=WebAppInfo(url=f"{WEBAPP_BASE}/keyboard_test.html?t={int(time.time())}"),
+            )
+        ]]
+    )
+    await message.answer(
+        "⌨ <b>A+ klaviatura sinovi</b>\n"
+        "To'g'ri javobni va o'quvchi javobini kiriting (masalan <code>0.5</code> va <code>1/2</code>) — "
+        "bir xil hisoblanishini ko'rasiz.",
+        parse_mode="HTML",
+        reply_markup=kb,
+    )
+
+
 @router.message(Command("xabar_sinov"), F.chat.type == "private")
 async def broadcast_self_test(message: Message):
     """Xabar yuborishni O'ZINGIZGA sinash: biror xabarga (premium emoji bilan) javob qilib
