@@ -202,7 +202,7 @@ async def set_warning_minutes(message: Message, state: FSMContext):
     await state.update_data(warning_minutes=minutes)
     await state.set_state(Attendance.waiting_report_minutes)
     await message.answer(
-        "📄 Necha <b>soatdan</b> keyin davomat yopilib, yakuniy hisobot (PDF) yuborilsin?\n"
+        "🔒 Necha <b>soatdan</b> keyin davomat yopilsin (shundan keyin kod qabul qilinmaydi)?\n"
         "Faqat son kiriting (masalan: 24)",
         parse_mode="HTML",
     )
@@ -225,7 +225,7 @@ async def set_report_minutes(message: Message, state: FSMContext, bot):
     warning_minutes = data["warning_minutes"]
     if report_minutes <= 0 or report_minutes < warning_minutes:
         await message.answer(
-            f"Hisobot vaqti ogohlantirishdan ({_fmt_hours(warning_minutes)}) keyin bo'lishi kerak. "
+            f"Yopilish vaqti ogohlantirishdan ({_fmt_hours(warning_minutes)}) keyin bo'lishi kerak. "
             "Qaytadan kiriting (masalan: 24)"
         )
         return
@@ -241,7 +241,7 @@ async def set_report_minutes(message: Message, state: FSMContext, bot):
         "✅ <b>Davomat boshlandi!</b>\n\n"
         f"🔑 Kod: <code>{code}</code>\n"
         f"⏰ Ogohlantirish: {_fmt_hours(warning_minutes)}dan keyin\n"
-        f"📄 Yopilish va hisobot: {_fmt_hours(report_minutes)}dan keyin\n\n"
+        f"🔒 Yopilish: {_fmt_hours(report_minutes)}dan keyin\n\n"
         "Kodni o'quvchilarga ayting. Ular \"📅 Davomat\" tugmasi orqali kiritishadi.",
         parse_mode="HTML",
     )
