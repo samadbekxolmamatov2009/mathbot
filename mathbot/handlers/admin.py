@@ -120,7 +120,7 @@ async def cmd_help(message: Message):
         "🗑 Foydalanuvchini o'chirish — /delete &lt;telegram_id&gt;\n"
         "👮 Adminlar — adminlar ro'yxati\n"
         "📅 Davomat — davomat olish/hisobot\n"
-        "📝 Javoblarni yozish — oddiy test yaratish (Mini App orqali)\n"
+        "📝 Test yaratish — oddiy test yaratish (Mini App orqali)\n"
         "🗂 Mening testlarim — yaratilgan oddiy testlar ro'yxati\n"
         "➕ A+ yaratish — A+ test yaratish (Mini App orqali)\n"
         "🗂 Mening A+ testlarim — yaratilgan A+ testlar ro'yxati\n"

@@ -13,7 +13,8 @@ ADMIN_MENU_TEXTS = {
     "🗑 Foydalanuvchini o'chirish",
     "👮 Adminlar",
     "📅 Davomat",
-    "📝 Javoblarni yozish",
+    "📝 Test yaratish",
+    "📝 Javoblarni yozish",     # eski tugma (telefonda menyu yangilanmaguncha)
     "🗂 Mening testlarim",
     "➕ A+ yaratish",
     "🗂 Mening A+ testlarim",
@@ -115,16 +116,14 @@ def admin_menu_keyboard(user_id=None, force_panel=False):
     return ReplyKeyboardMarkup(
         keyboard=panel_row + [
             [
-                KeyboardButton(text="🗑 Foydalanuvchini o'chirish"),
                 KeyboardButton(text="👮 Adminlar"),
             ],
             [
                 KeyboardButton(text="📅 Davomat"),
-                KeyboardButton(text="📝 Javoblarni yozish"),
+                KeyboardButton(text="📝 Test yaratish"),
             ],
             [
                 KeyboardButton(text="🗂 Mening testlarim"),
-                KeyboardButton(text="ℹ️ Yordam"),
             ],
             [
                 KeyboardButton(text="➕ A+ yaratish"),
@@ -171,6 +170,10 @@ def boss_menu_keyboard():
             ],
             [
                 KeyboardButton(text="📡 Kanalni o'zgartirish"),
+            ],
+            [
+                KeyboardButton(text="🗑 Foydalanuvchini o'chirish"),
+                KeyboardButton(text="ℹ️ Yordam"),
             ],
         ],
         resize_keyboard=True,

@@ -1915,40 +1915,37 @@ async def get_panel_reports(kind: str, limit: int = 30, offset: int = 0):
     """Panel "Hisobotlar" bo'limi: har bir test/davomat uchun UMUMIY sonlar (o'quvchilar ro'yxatisiz).
     kind: 'tests' | 'aplus' | 'attendance'. done - ishlaganlar/qatnashganlar, total - o'sha payt
     ro'yxatdan o'tgan o'quvchilar (keyin ro'yxatdan o'tganlar hisobga olinmaydi), avg - o'rtacha ball.
-    Qaytaradi: (elementlar - yangisi birinchi, jami elementlar soni)."""
+    Qaytaradi: (elementlar - yangisi birinchi, jami elementlar soni).
+    Baza tarmoq orqali (Turso) bo'lgani uchun hammasi BITTA so'rovda olinadi (har element uchun
+    alohida so'rov yuborish sekin edi)."""
     table, cols, sub_table, fk, score = _PANEL_REPORT_KINDS[kind]
     now_str = _now_deadline_str()
+    eligible = "u.is_registered = 1 AND (u.registered_at IS NULL OR u.registered_at <= t.created_at)"
+    sql = (
+        f"SELECT {cols}, "
+        f"(SELECT COUNT(*) FROM users u WHERE {eligible}) AS total, "
+        f"(SELECT COUNT(*) FROM {sub_table} s JOIN users u ON u.telegram_id = s.telegram_id "
+        f"  WHERE s.{fk} = t.id AND {eligible}) AS done, "
+        + (f"(SELECT AVG(s.score) FROM {sub_table} s JOIN users u ON u.telegram_id = s.telegram_id "
+           f"  WHERE s.{fk} = t.id AND {eligible}) AS avg "
+           if kind != "attendance" else "NULL AS avg ")
+        + f"FROM {table} t ORDER BY t.id DESC LIMIT ? OFFSET ?"
+    )
     async with aiosqlite.connect(DB_PATH) as db:
         async with db.execute(f"SELECT COUNT(*) FROM {table}") as c:
             total_items = (await c.fetchone())[0]
-        async with db.execute(
-            f"SELECT {cols} FROM {table} t ORDER BY t.id DESC LIMIT ? OFFSET ?", (limit, offset)
-        ) as c:
+        async with db.execute(sql, (limit, offset)) as c:
             rows = await c.fetchall()
-        items = []
-        for tid, code, name, created_at, end_time, is_active in rows:
-            async with db.execute(
-                f"SELECT COUNT(*), {score} FROM {sub_table} s "
-                f"JOIN users u ON u.telegram_id = s.telegram_id "
-                f"WHERE s.{fk} = ? AND u.is_registered = 1 "
-                f"AND (u.registered_at IS NULL OR u.registered_at <= ?)",
-                (tid, created_at),
-            ) as c:
-                done, avg = await c.fetchone()
-            async with db.execute(
-                "SELECT COUNT(*) FROM users WHERE is_registered = 1 "
-                "AND (registered_at IS NULL OR registered_at <= ?)",
-                (created_at,),
-            ) as c:
-                total = (await c.fetchone())[0]
-            if kind == "attendance":
-                finished = not is_active
-            else:
-                finished = (not end_time) or str(end_time) <= now_str
-            items.append({
-                "id": tid, "code": code, "name": name, "created_at": created_at,
-                "done": done or 0, "total": total,
-                "avg": round(avg, 1) if avg is not None else None,
-                "finished": bool(finished),
-            })
+    items = []
+    for tid, code, name, created_at, end_time, is_active, total, done, avg in rows:
+        if kind == "attendance":
+            finished = not is_active
+        else:
+            finished = (not end_time) or str(end_time) <= now_str
+        items.append({
+            "id": tid, "code": code, "name": name, "created_at": created_at,
+            "done": done or 0, "total": total or 0,
+            "avg": round(avg, 1) if avg is not None else None,
+            "finished": bool(finished),
+        })
     return items, total_items
