@@ -332,58 +332,66 @@ async def start_broadcast(message: Message, state: FSMContext):
     await state.update_data(items=[])
     await message.answer(
         "📢 Barcha ro'yxatdan o'tgan foydalanuvchilarga yubormoqchi bo'lgan xabaringizni tayyorlang.\n"
-        "Matn, rasm, PDF, video, dumaloq video, ovozli xabar, GIF, stiker — istalganini yuborishingiz mumkin, xohlagancha va istalgan tartibda. "
+        "Matn, rasm, PDF, video, dumaloq video, ovozli xabar, GIF, stiker — istalganini, shu jumladan bir nechta faylni BIRDAN (albom) yuborishingiz mumkin. "
         "Premium emoji, qalin/kursiv matn va havolalar o'z holicha saqlanadi.\n"
         "Tayyor bo'lgach, \"✅ Yuborish\" tugmasini bosing."
     )
+
+
+_broadcast_locks: dict = {}
+
+
+async def _collect_broadcast_item(message: Message, state: FSMContext, label: str, extra: dict | None = None):
+    """Xabarni to'plamga qo'shadi. Bir nechta fayl (albom) BIRDAN yuborilsa, Telegram ularni alohida
+    xabarlar sifatida (bir xil media_group_id bilan) kelib tushiradi: ular bir vaqtda kelgani uchun
+    to'plam qulf ostida yangilanadi (aks holda ba'zilari yo'qolardi) va albomga faqat BIR marta javob
+    beriladi (keyingi fayllar uchun tugma sonini yangilaydi)."""
+    lock = _broadcast_locks.setdefault(message.chat.id, asyncio.Lock())
+    async with lock:
+        data = await state.get_data()
+        items = data.get("items", [])
+        gid = message.media_group_id
+        items.append({
+            "type": message.content_type if isinstance(message.content_type, str) else message.content_type.value,
+            "chat_id": message.chat.id, "message_id": message.message_id, "group": gid,
+            **(extra or {}),
+        })
+        status = data.get("status")   # [media_group_id, status_message_id]
+        await state.update_data(items=items)
+        kb = _broadcast_status_kb(len(items))
+        if gid and status and status[0] == gid:
+            try:
+                await message.bot.edit_message_reply_markup(
+                    chat_id=message.chat.id, message_id=status[1], reply_markup=kb
+                )
+            except Exception:
+                pass
+            return
+        sent = await message.answer(
+            f"✅ {label} qabul qilindi ({len(items)} ta element to'plandi).", reply_markup=kb
+        )
+        await state.update_data(status=[gid, sent.message_id] if gid else None)
 
 
 @router.message(Broadcast.composing, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
 async def collect_broadcast_text(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
-
-    data = await state.get_data()
-    items = data.get("items", [])
-    items.append({"type": "text", "content": message.text,
-                  "chat_id": message.chat.id, "message_id": message.message_id})
-    await state.update_data(items=items)
-    await message.answer(
-        f"✅ Matn qabul qilindi ({len(items)} ta element to'plandi).",
-        reply_markup=_broadcast_status_kb(len(items)),
-    )
+    await _collect_broadcast_item(message, state, "Matn", {"content": message.text})
 
 
 @router.message(Broadcast.composing, F.photo)
 async def collect_broadcast_photo(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
-
-    data = await state.get_data()
-    items = data.get("items", [])
-    items.append({"type": "photo", "content": message.photo[-1].file_id, "caption": message.caption,
-                  "chat_id": message.chat.id, "message_id": message.message_id})
-    await state.update_data(items=items)
-    await message.answer(
-        f"✅ Rasm qabul qilindi ({len(items)} ta element to'plandi).",
-        reply_markup=_broadcast_status_kb(len(items)),
-    )
+    await _collect_broadcast_item(message, state, "Rasm")
 
 
 @router.message(Broadcast.composing, F.document)
 async def collect_broadcast_document(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
-
-    data = await state.get_data()
-    items = data.get("items", [])
-    items.append({"type": "document", "content": message.document.file_id, "caption": message.caption,
-                  "chat_id": message.chat.id, "message_id": message.message_id})
-    await state.update_data(items=items)
-    await message.answer(
-        f"✅ Fayl qabul qilindi ({len(items)} ta element to'plandi).",
-        reply_markup=_broadcast_status_kb(len(items)),
-    )
+    await _collect_broadcast_item(message, state, "Fayl")
 
 
 _BROADCAST_OTHER_TYPES = {
@@ -398,16 +406,21 @@ async def collect_broadcast_other(message: Message, state: FSMContext):
     copy_message bilan o'zgarishsiz ko'chiriladi."""
     if not is_admin(message.from_user.id):
         return
-
-    data = await state.get_data()
-    items = data.get("items", [])
     kind = message.content_type if isinstance(message.content_type, str) else message.content_type.value
-    items.append({"type": kind, "content": None, "chat_id": message.chat.id, "message_id": message.message_id})
-    await state.update_data(items=items)
-    await message.answer(
-        f"✅ {_BROADCAST_OTHER_TYPES.get(kind, 'Xabar')} qabul qilindi ({len(items)} ta element to'plandi).",
-        reply_markup=_broadcast_status_kb(len(items)),
-    )
+    await _collect_broadcast_item(message, state, _BROADCAST_OTHER_TYPES.get(kind, "Xabar"))
+
+
+def _broadcast_batches(items):
+    """Ketma-ket kelgan bir xil albom (media_group_id) fayllarini bitta to'plamga birlashtiradi -
+    ular copy_messages bilan albom bo'lib yuboriladi. Qolganlari bittadan."""
+    batches = []
+    for item in items:
+        gid = item.get("group")
+        if gid and batches and batches[-1]["group"] == gid:
+            batches[-1]["items"].append(item)
+        else:
+            batches.append({"group": gid, "items": [item]})
+    return batches
 
 
 @router.callback_query(F.data == "broadcast_send")
@@ -430,21 +443,28 @@ async def confirm_broadcast(callback: CallbackQuery, state: FSMContext, bot):
     users = await db.get_all_users()
     sent = 0
     failed = 0
+    batches = _broadcast_batches(items)
     for u in users:
         ok = True
-        for item in items:
+        for batch in batches:
             try:
-                if item.get("message_id"):
-                    # copy_message xabarni ASL holicha ko'chiradi: premium emoji, qalin/kursiv,
-                    # havolalar va rasm/fayl izohidagi formatlash ham saqlanadi
-                    # (send_message(text) esa faqat oddiy matn yuborar edi).
-                    await bot.copy_message(u["telegram_id"], item["chat_id"], item["message_id"])
-                elif item["type"] == "text":
-                    await bot.send_message(u["telegram_id"], item["content"])
-                elif item["type"] == "photo":
-                    await bot.send_photo(u["telegram_id"], item["content"], caption=item.get("caption"))
-                else:
-                    await bot.send_document(u["telegram_id"], item["content"], caption=item.get("caption"))
+                group_items = batch["items"]
+                if len(group_items) > 1 and all(i.get("message_id") for i in group_items):
+                    # Albom: copy_messages albom tuzilishini saqlab ko'chiradi
+                    ids = sorted(i["message_id"] for i in group_items)[:100]
+                    await bot.copy_messages(u["telegram_id"], group_items[0]["chat_id"], ids)
+                    continue
+                for item in group_items:
+                    if item.get("message_id"):
+                        # copy_message xabarni ASL holicha ko'chiradi: premium emoji, qalin/kursiv,
+                        # havolalar va rasm/fayl izohidagi formatlash ham saqlanadi
+                        await bot.copy_message(u["telegram_id"], item["chat_id"], item["message_id"])
+                    elif item["type"] == "text":
+                        await bot.send_message(u["telegram_id"], item["content"])
+                    elif item["type"] == "photo":
+                        await bot.send_photo(u["telegram_id"], item["content"], caption=item.get("caption"))
+                    else:
+                        await bot.send_document(u["telegram_id"], item["content"], caption=item.get("caption"))
             except Exception:
                 ok = False
             await asyncio.sleep(0.05)
