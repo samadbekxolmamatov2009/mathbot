@@ -72,6 +72,7 @@ def _normalize_text(s: str) -> str:
     s = s.strip().lower()
     s = s.replace(" ", "")
     s = s.replace(",", ".")
+    s = s.replace(":", "/")      # "6:3" - bo'lish belgisi (maktabda ":" bilan yoziladi)
     # "√4" -> "sqrt(4)"; "√(4+5)" ning qavslari allaqachon bor, keyingi qatorda
     # qolgan "√" belgisi shunchaki "sqrt" ga almashtiriladi.
     s = _BARE_SQRT_RE.sub(lambda m: f"sqrt({m.group(1)})", s)
