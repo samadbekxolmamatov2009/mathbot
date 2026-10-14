@@ -154,9 +154,11 @@ JOKES = [
     "Testlaringizni kutaverib, mening ham simlarim chang bosib ketdi 🕸\n"
     "Qani, kim birinchi bo'lib meni xursand qiladi? 🏆",
 
-    "⏰ Diqqat, diqqat! Bot gapiryapti!\n"
-    "Agar vazifalar topshirilmasa, men har kuni \"salom\" deb yozib, sizni charchatib qo'yaman 😈\n"
-    "Yaxshisi, vazifalarni qilib qo'ying 😁",
+    "🕵️ Bot guruhga e'lon qiladi:\n"
+    "Bugun reyting jadvalida ajoyib sirli hodisa yuz berdi...\n"
+    "Ba'zi ismlar yonida ballar yo'q! 👀 Ular qayerga g'oyib bo'ldi?\n"
+    "Topishmoq javobi oddiy: vazifa hali topshirilmagan 😉\n"
+    "Keling, sirni birga yechamiz — vazifani topshiring, ballar o'zi paydo bo'ladi! ✨",
 
     "🎙 Assalomu alaykum, aziz tomoshabinlar! Soat 14:00...\n"
     "Jamoamiz hali ham \"vazifa\" degan to'pni darvozaga kiritmadi! ⚽️\n"
