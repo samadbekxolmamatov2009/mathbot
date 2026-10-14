@@ -290,7 +290,8 @@ async def start_broadcast(message: Message, state: FSMContext):
     await state.update_data(items=[])
     await message.answer(
         "📢 Barcha ro'yxatdan o'tgan foydalanuvchilarga yubormoqchi bo'lgan xabaringizni tayyorlang.\n"
-        "Matn, rasm yoki PDF fayl yuborishingiz mumkin — xohlagancha, istalgan tartibda.\n"
+        "Matn, rasm yoki PDF fayl yuborishingiz mumkin — xohlagancha, istalgan tartibda. "
+        "Premium emoji, qalin/kursiv matn va havolalar o'z holicha saqlanadi.\n"
         "Tayyor bo'lgach, \"✅ Yuborish\" tugmasini bosing."
     )
 
@@ -302,7 +303,8 @@ async def collect_broadcast_text(message: Message, state: FSMContext):
 
     data = await state.get_data()
     items = data.get("items", [])
-    items.append({"type": "text", "content": message.text})
+    items.append({"type": "text", "content": message.text,
+                  "chat_id": message.chat.id, "message_id": message.message_id})
     await state.update_data(items=items)
     await message.answer(
         f"✅ Matn qabul qilindi ({len(items)} ta element to'plandi).",
@@ -317,7 +319,8 @@ async def collect_broadcast_photo(message: Message, state: FSMContext):
 
     data = await state.get_data()
     items = data.get("items", [])
-    items.append({"type": "photo", "content": message.photo[-1].file_id, "caption": message.caption})
+    items.append({"type": "photo", "content": message.photo[-1].file_id, "caption": message.caption,
+                  "chat_id": message.chat.id, "message_id": message.message_id})
     await state.update_data(items=items)
     await message.answer(
         f"✅ Rasm qabul qilindi ({len(items)} ta element to'plandi).",
@@ -332,7 +335,8 @@ async def collect_broadcast_document(message: Message, state: FSMContext):
 
     data = await state.get_data()
     items = data.get("items", [])
-    items.append({"type": "document", "content": message.document.file_id, "caption": message.caption})
+    items.append({"type": "document", "content": message.document.file_id, "caption": message.caption,
+                  "chat_id": message.chat.id, "message_id": message.message_id})
     await state.update_data(items=items)
     await message.answer(
         f"✅ Fayl qabul qilindi ({len(items)} ta element to'plandi).",
@@ -364,7 +368,12 @@ async def confirm_broadcast(callback: CallbackQuery, state: FSMContext, bot):
         ok = True
         for item in items:
             try:
-                if item["type"] == "text":
+                if item.get("message_id"):
+                    # copy_message xabarni ASL holicha ko'chiradi: premium emoji, qalin/kursiv,
+                    # havolalar va rasm/fayl izohidagi formatlash ham saqlanadi
+                    # (send_message(text) esa faqat oddiy matn yuborar edi).
+                    await bot.copy_message(u["telegram_id"], item["chat_id"], item["message_id"])
+                elif item["type"] == "text":
                     await bot.send_message(u["telegram_id"], item["content"])
                 elif item["type"] == "photo":
                     await bot.send_photo(u["telegram_id"], item["content"], caption=item.get("caption"))
