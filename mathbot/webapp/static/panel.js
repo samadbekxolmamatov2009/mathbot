@@ -778,7 +778,7 @@
   var MSG_ERRORS = {
     blocked: "O'quvchi botni bloklagan yoki akkaunti o'chirilgan — xabar yetmaydi.",
     chat_not_found: "Bu o'quvchi botda chat ochmagan — xabar yetmaydi.",
-    boss_only: "Xabar yuborish faqat Boss uchun.",
+    boss_only: "Sizda xabar yuborish ruxsati yo'q.",
     too_many: "Juda ko'p xabar yuborildi. Bir daqiqadan keyin urinib ko'ring.",
     empty_message: "Xabar matnini yozing.",
     message_too_long: "Xabar juda uzun.",

@@ -56,6 +56,15 @@ PANEL_REMOVE_FOR_ADMINS = os.getenv("PANEL_REMOVE_FOR_ADMINS", "").strip().lower
 REMOVAL_CHANNEL_ID = os.getenv("REMOVAL_CHANNEL_ID", "").strip()
 
 
+# Paneldan BITTA o'quvchiga bot nomidan xabar yozish: hozircha faqat Boss. Oddiy adminlarga ochish uchun
+# PANEL_MESSAGE_FOR_ADMINS=1 qo'ying (har admin uchun daqiqasiga 30 tagacha chegarasi bor).
+PANEL_MESSAGE_FOR_ADMINS = os.getenv("PANEL_MESSAGE_FOR_ADMINS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def can_message_student(user_id) -> bool:
+    return is_boss(user_id) or (PANEL_MESSAGE_FOR_ADMINS and can_use_panel(user_id))
+
+
 def can_remove_student(user_id) -> bool:
     return is_boss(user_id) or (PANEL_REMOVE_FOR_ADMINS and can_use_panel(user_id))
 
