@@ -42,6 +42,7 @@ async def keep_webapp_alive_loop():
                 logging.exception("Keep-alive ping muvaffaqiyatsiz")
             await asyncio.sleep(KEEP_ALIVE_INTERVAL_SECONDS)
 import database as db
+from joke_schedule import get_overrides as get_joke_overrides, is_joke_date
 from database import init_db
 from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
 from middlewares import SubscriptionCheckMiddleware
@@ -231,8 +232,9 @@ async def send_broadcast_schedule_loop(bot: Bot):
             now = now_tashkent()
             start = now.replace(hour=JOKE_TIME[0], minute=JOKE_TIME[1], second=0, microsecond=0)
             today = now.strftime("%Y-%m-%d")
+            skip_dates, extra_dates = await get_joke_overrides()
             if (
-                now.weekday() in JOKE_DAYS
+                is_joke_date(now, skip_dates, extra_dates)
                 and start <= now < start + timedelta(minutes=10)
                 and await db.get_setting("joke_last_sent_date") != today
             ):

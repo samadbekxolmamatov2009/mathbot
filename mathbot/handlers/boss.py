@@ -547,6 +547,7 @@ async def boss_report_test(message: Message):
 # obuna tekshiruvi ham, haftalik hisobot ham shu guruhga o'tadi.
 
 import json as _json
+from joke_schedule import add_extra_date, clear_skips, next_joke_time, parse_date, skip_date
 
 
 async def _remember_chat(chat):
@@ -687,22 +688,6 @@ async def boss_set_removal_channel(callback: CallbackQuery):
 
 # ---------- Hazillar: /hazil va /hazil_yubor ----------
 
-def _next_joke_time(now, sent_today: bool):
-    """Navbatdagi hazil yuboriladigan sana-vaqt (chorshanba/shanba 14:00)."""
-    from datetime import timedelta
-    from config import JOKE_DAYS, JOKE_TIME
-    for add_days in range(0, 8):
-        day = (now + timedelta(days=add_days)).replace(
-            hour=JOKE_TIME[0], minute=JOKE_TIME[1], second=0, microsecond=0
-        )
-        if day.weekday() not in JOKE_DAYS:
-            continue
-        if add_days == 0 and (sent_today or now >= day + timedelta(minutes=10)):
-            continue
-        return day
-    return None
-
-
 @router.message(Command("hazil"), F.chat.type == "private")
 async def boss_show_joke(message: Message):
     if not is_boss(message.from_user.id):
@@ -713,7 +698,7 @@ async def boss_show_joke(message: Message):
     now = now_tashkent()
     index = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
     sent_today = await db.get_setting("joke_last_sent_date") == now.strftime("%Y-%m-%d")
-    nxt = _next_joke_time(now, sent_today)
+    nxt = await next_joke_time(now, sent_today)
     when = f"{nxt.strftime('%d.%m.%Y')} ({WEEKDAYS[nxt.weekday()]}) soat {nxt.strftime('%H:%M')}" if nxt else "-"
     sticker = await db.get_setting("joke_sticker_id")
     await message.answer(
@@ -729,6 +714,87 @@ async def boss_show_joke(message: Message):
             await message.answer_sticker(sticker)
         except Exception:
             pass
+
+
+_WEEKDAYS_UZ = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
+
+
+def _fmt_joke_day(dt) -> str:
+    return f"{dt.strftime('%d.%m.%Y')} ({_WEEKDAYS_UZ[dt.weekday()]}) soat {dt.strftime('%H:%M')}"
+
+
+@router.message(Command("hazil_cancel"), F.chat.type == "private")
+async def boss_cancel_joke(message: Message, command: CommandObject):
+    """Hazil yuborishni bir martalik bekor qilish. Navbat O'ZGARMAYDI - o'sha hazil keyingi safar boradi.
+    /hazil_cancel - eng yaqin yuboriladigan kunni o'tkazib yuboradi;
+    /hazil_cancel 21.10 - shu sanani; /hazil_cancel qaytar - hamma bekorlarni olib tashlaydi."""
+    if not is_boss(message.from_user.id):
+        return
+    from timezone_utils import now_tashkent
+    now = now_tashkent()
+    today = now.strftime("%Y-%m-%d")
+    arg = (command.args or "").strip()
+    sent_today = await db.get_setting("joke_last_sent_date") == today
+
+    if arg.lower() in ("qaytar", "bekor", "off"):
+        await clear_skips()
+        nxt = await next_joke_time(now, sent_today)
+        await message.answer("✅ Hamma bekorlar olib tashlandi.\n"
+                             f"📅 Keyingi hazil: {_fmt_joke_day(nxt) if nxt else '-'}")
+        return
+
+    if arg:
+        date_str = parse_date(arg, now)
+        if not date_str:
+            await message.answer("Sanani shunday yozing: /hazil_cancel 21.10  (kun.oy)")
+            return
+        if date_str < today:
+            await message.answer("Bu sana o'tib ketgan.")
+            return
+        target = date_str
+    else:
+        nxt = await next_joke_time(now, sent_today)
+        if not nxt:
+            await message.answer("Yaqin kunlarda yuboriladigan hazil topilmadi.")
+            return
+        target = nxt.strftime("%Y-%m-%d")
+
+    await skip_date(target, today)
+    nxt = await next_joke_time(now, sent_today)
+    from config import JOKES
+    index = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
+    await message.answer(
+        f"🚫 {target[8:10]}.{target[5:7]}.{target[:4]} kuni hazil <b>yuborilmaydi</b>.\n"
+        f"📅 Keyingi hazil: <b>{_fmt_joke_day(nxt) if nxt else '-'}</b> ({index + 1}-hazil — navbat joyida turibdi).\n\n"
+        "Qaytarish: /hazil_cancel qaytar\nBoshqa kunga qo'yish: /hazil_kun 22.10",
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("hazil_kun"), F.chat.type == "private")
+async def boss_extra_joke_day(message: Message, command: CommandObject):
+    """Hazilni odatdagi (chorshanba/shanba) kundan tashqari BOSHQA kunda ham yuborish: /hazil_kun 22.10
+    (soat odatdagidek 14:00). Odatda /hazil_cancel bilan birga ishlatiladi: bekor qilib, boshqa kunga ko'chirish."""
+    if not is_boss(message.from_user.id):
+        return
+    from timezone_utils import now_tashkent
+    now = now_tashkent()
+    today = now.strftime("%Y-%m-%d")
+    date_str = parse_date((command.args or ""), now)
+    if not date_str:
+        await message.answer("Sanani shunday yozing: /hazil_kun 22.10  (kun.oy). Hazil shu kuni 14:00 da yuboriladi.")
+        return
+    if date_str < today:
+        await message.answer("Bu sana o'tib ketgan.")
+        return
+    await add_extra_date(date_str, today)
+    sent_today = await db.get_setting("joke_last_sent_date") == today
+    nxt = await next_joke_time(now, sent_today)
+    await message.answer(
+        f"✅ {date_str[8:10]}.{date_str[5:7]}.{date_str[:4]} kuni ham hazil yuboriladi.\n"
+        f"📅 Eng yaqin hazil: <b>{_fmt_joke_day(nxt) if nxt else '-'}</b>",
+        parse_mode="HTML",
+    )
 
 
 @router.message(Command("hazil_change"), F.chat.type == "private")
