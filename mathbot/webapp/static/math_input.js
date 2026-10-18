@@ -266,6 +266,21 @@
       }
       var getPlain = function () { return latexToPlain(mf.value); };
       mf.addEventListener("input", function () { onChange(getPlain()); });
+
+      // Telefonda: maydon ustiga bir marta bosilsa klaviatura ochiladi, YANA bir marta bosilsa yopiladi.
+      // (Boshqa maydonga bosilsa - klaviatura ochiq qoladi va o'sha maydonga o'tadi.)
+      var wasOpenOnPress = false;
+      var isTouch = function (e) { return e.pointerType === "touch" || e.pointerType === "pen"; };
+      mf.addEventListener("pointerdown", function (e) {
+        var kb = root.mathVirtualKeyboard;
+        wasOpenOnPress = !!(kb && kb.visible) && isTouch(e) && (document.activeElement === mf || mf.matches(":focus-within"));
+      }, true);
+      mf.addEventListener("click", function () {
+        if (!wasOpenOnPress) return;
+        wasOpenOnPress = false;
+        hideMathKeyboard();
+        try { mf.blur(); } catch (e) {}
+      });
       return { el: mf, getPlain: getPlain, isMath: true };
     }
 
