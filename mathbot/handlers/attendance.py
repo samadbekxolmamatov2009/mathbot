@@ -4,7 +4,7 @@ import random
 import tempfile
 
 from aiogram import Router, F
-from aiogram.filters import BaseFilter
+from aiogram.filters import BaseFilter, Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
@@ -181,38 +181,27 @@ async def start_attendance_admin(message: Message, state: FSMContext):
             parse_mode="HTML",
         )
 
-    await state.set_state(Attendance.waiting_warning_minutes)
-    await message.answer(
-        "⏰ Necha <b>soatdan</b> keyin kod kiritmagan o'quvchilarga ogohlantirish yuborilsin?\n"
-        "Faqat son kiriting (masalan: 12 yoki 1,5)",
-        parse_mode="HTML",
-    )
-
-
-@router.message(Attendance.waiting_warning_minutes, F.text.regexp(HOURS_RE))
-async def set_warning_minutes(message: Message, state: FSMContext):
-    if not is_admin(message.from_user.id):
-        return
-
-    minutes = _hours_to_minutes(message.text)
-    if minutes <= 0:
-        await message.answer("Iltimos, musbat son kiriting (masalan: 12)")
-        return
-
-    await state.update_data(warning_minutes=minutes)
     await state.set_state(Attendance.waiting_report_minutes)
     await message.answer(
         "🔒 Necha <b>soatdan</b> keyin davomat yopilsin (shundan keyin kod qabul qilinmaydi)?\n"
-        "Faqat son kiriting (masalan: 24)",
+        "Faqat son kiriting (masalan: 24)\n\n"
+        "Davomat yopilgach, kod kiritmagan o'quvchilarga 1 daqiqa ichida ogohlantirish yuboriladi.\n"
+        "Bekor qilish: /cancel",
         parse_mode="HTML",
     )
 
 
-@router.message(Attendance.waiting_warning_minutes, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
-async def set_warning_minutes_invalid(message: Message):
+async def _cancel_flow(message: Message, state: FSMContext):
+    """Admin jarayonni (davomat yaratish / muddatni o'zgartirish / javob yozish) /cancel bilan bekor qiladi."""
     if not is_admin(message.from_user.id):
         return
-    await message.answer("Iltimos, soatni son bilan kiriting (masalan: 12 yoki 1,5)")
+    await state.clear()
+    await message.answer("Bekor qilindi.")
+
+
+@router.message(Attendance.waiting_report_minutes, Command("cancel"))
+async def attendance_create_cancel(message: Message, state: FSMContext):
+    await _cancel_flow(message, state)
 
 
 @router.message(Attendance.waiting_report_minutes, F.text.regexp(HOURS_RE))
@@ -221,14 +210,12 @@ async def set_report_minutes(message: Message, state: FSMContext, bot):
         return
 
     report_minutes = _hours_to_minutes(message.text)
-    data = await state.get_data()
-    warning_minutes = data["warning_minutes"]
-    if report_minutes <= 0 or report_minutes < warning_minutes:
-        await message.answer(
-            f"Yopilish vaqti ogohlantirishdan ({_fmt_hours(warning_minutes)}) keyin bo'lishi kerak. "
-            "Qaytadan kiriting (masalan: 24)"
-        )
+    if report_minutes <= 0:
+        await message.answer("Iltimos, musbat son kiriting (masalan: 24)")
         return
+    # Ogohlantirish vaqtlari endi so'ralmaydi: u davomat yopilganda yuboriladi (baza ustuni
+    # to'ldirilishi uchun yopilish vaqti yoziladi).
+    warning_minutes = report_minutes
     await state.clear()
 
     # Kod faol davomatlar kodlari bilan takrorlanmasin
@@ -240,8 +227,8 @@ async def set_report_minutes(message: Message, state: FSMContext, bot):
     await message.answer(
         "✅ <b>Davomat boshlandi!</b>\n\n"
         f"🔑 Kod: <code>{code}</code>\n"
-        f"⏰ Ogohlantirish: {_fmt_hours(warning_minutes)}dan keyin\n"
-        f"🔒 Yopilish: {_fmt_hours(report_minutes)}dan keyin\n\n"
+        f"🔒 Yopilish: {_fmt_hours(report_minutes)}dan keyin\n"
+        "⏰ Yopilgach kod kiritmaganlarga ogohlantirish yuboriladi.\n\n"
         "Kodni o'quvchilarga ayting. Ular \"📅 Davomat\" tugmasi orqali kiritishadi.",
         parse_mode="HTML",
     )
@@ -272,19 +259,11 @@ async def _run_attendance_session(bot, session_id: int, warning_minutes: int, re
     """Davomatni kuzatadi. Muddat har 30 soniyada bazadan qayta o'qiladi - shuning
     uchun admin "⏱ Muddatni o'zgartirish" orqali vaqtni o'zgartirsa, darhol hisobga olinadi.
     Bot qayta ishga tushganda o'tib ketgan ogohlantirish qayta yuborilmaydi."""
-    warned = elapsed_seconds >= warning_minutes * 60
     while True:
         session = await db.get_attendance_session(session_id)
         if not session or not session["is_active"]:
             return
         elapsed = _session_elapsed_seconds(session)
-        if not warned and elapsed >= session["warning_minutes"] * 60:
-            warned = True
-            for user_id in await db.get_unattended_user_ids(session_id):
-                try:
-                    await bot.send_message(user_id, "❗️ Hurmatli o'quvchi, darslarni qoldirmang!")
-                except Exception:
-                    pass
         left = session["report_minutes"] * 60 - elapsed
         if left <= 0:
             break
@@ -296,6 +275,7 @@ async def _run_attendance_session(bot, session_id: int, warning_minutes: int, re
     for user_id in final_unattended:
         streak = await db.get_consecutive_miss_streak(user_id)
         if streak == CONSECUTIVE_MISS_THRESHOLD:
+            # Ketma-ket qoldirganlardan sabab so'raladi (u allaqachon ogohlantirish o'rnini bosadi)
             await db.set_pending_absence_reason(user_id, session_id)
             try:
                 await bot.send_message(
@@ -306,6 +286,13 @@ async def _run_attendance_session(bot, session_id: int, warning_minutes: int, re
                 )
             except Exception:
                 pass
+        else:
+            # Davomat yopilgach kod kiritmaganlarga ogohlantirish (loop har 30 soniyada tekshiradi -> 1 daqiqa ichida)
+            try:
+                await bot.send_message(user_id, "❗️ Hurmatli o'quvchi, darslarni qoldirmang!")
+            except Exception:
+                pass
+            await asyncio.sleep(0.05)
 
     # Muddat tugagach hisobot endi adminlarga AVTOMATIK yuborilmaydi: Boss/adminlar
     # Mini App panelidagi "📊 Hisobotlar" bo'limida har bir davomatda necha kishi qatnashgani ko'rinadi.
@@ -371,9 +358,14 @@ async def attendance_edit_pick(callback: CallbackQuery, state: FSMContext):
     await callback.message.answer(
         f"🔑 Kod <code>{session['code']}</code>: hozirgi muddat {_fmt_hours(session['report_minutes'])} "
         f"(boshlanganiga {passed:.1f} soat bo'ldi).\n\n"
-        "Yangi muddatni <b>davomat boshlangan vaqtdan hisoblab</b> soatda kiriting (masalan: 24):",
+        "Yangi muddatni <b>davomat boshlangan vaqtdan hisoblab</b> soatda kiriting (masalan: 24)\nBekor qilish: /cancel",
         parse_mode="HTML",
     )
+
+
+@router.message(AttendanceEdit.waiting_hours, Command("cancel"))
+async def attendance_edit_cancel(message: Message, state: FSMContext):
+    await _cancel_flow(message, state)
 
 
 @router.message(AttendanceEdit.waiting_hours, F.text.regexp(HOURS_RE))
@@ -415,7 +407,12 @@ async def absence_reply_start(callback: CallbackQuery, state: FSMContext):
     name = (user["full_name"] if user else None) or "o'quvchi"
     await state.set_state(AbsenceReply.waiting_text)
     await state.update_data(reply_user_id=user_id)
-    await callback.message.answer(f"✍️ <b>{name}</b> ga javobingizni yozing:", parse_mode="HTML")
+    await callback.message.answer(f"✍️ <b>{name}</b> ga javobingizni yozing:\n(bekor qilish: /cancel)", parse_mode="HTML")
+
+
+@router.message(AbsenceReply.waiting_text, Command("cancel"))
+async def absence_reply_cancel(message: Message, state: FSMContext):
+    await _cancel_flow(message, state)
 
 
 @router.message(AbsenceReply.waiting_text, F.text, ~F.text.in_(NAV_BUTTON_TEXTS))

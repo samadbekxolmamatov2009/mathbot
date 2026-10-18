@@ -22,7 +22,6 @@ class ProfileEdit(StatesGroup):
 
 class Attendance(StatesGroup):
     """Admin yangi davomat sessiyasini boshlashda ishlatiladigan holatlar"""
-    waiting_warning_minutes = State()
     waiting_report_minutes = State()
 
 
