@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timedelta
 
 import database as db
-from config import JOKE_DAYS, JOKE_TIME
+from config import JOKE_DAYS, JOKE_TIME, JOKES
 
 SKIP_KEY = "joke_skip_dates"
 EXTRA_KEY = "joke_extra_dates"
@@ -89,3 +89,24 @@ def parse_date(text: str, now):
         except ValueError:
             return None
     return None
+
+
+EXTRA_JOKES_KEY = "extra_jokes"
+
+
+async def get_all_jokes() -> list:
+    """config.JOKES (kodda yozilgan) + Boss /hazil_add bilan qo'shgan hazillar (bazada saqlanadi)."""
+    try:
+        extra = json.loads(await db.get_setting(EXTRA_JOKES_KEY) or "[]")
+    except ValueError:
+        extra = []
+    return JOKES + extra
+
+
+async def add_joke(text: str):
+    try:
+        extra = json.loads(await db.get_setting(EXTRA_JOKES_KEY) or "[]")
+    except ValueError:
+        extra = []
+    extra.append(text)
+    await db.set_setting(EXTRA_JOKES_KEY, json.dumps(extra, ensure_ascii=False))

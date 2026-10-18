@@ -547,7 +547,7 @@ async def boss_report_test(message: Message):
 # obuna tekshiruvi ham, haftalik hisobot ham shu guruhga o'tadi.
 
 import json as _json
-from joke_schedule import add_extra_date, clear_skips, next_joke_time, parse_date, skip_date
+from joke_schedule import add_extra_date, add_joke, clear_skips, get_all_jokes, next_joke_time, parse_date, skip_date
 
 
 async def _remember_chat(chat):
@@ -692,21 +692,22 @@ async def boss_set_removal_channel(callback: CallbackQuery):
 async def boss_show_joke(message: Message):
     if not is_boss(message.from_user.id):
         return
-    from config import JOKES
+    jokes = await get_all_jokes()
     from timezone_utils import now_tashkent
     WEEKDAYS = ["Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba", "Yakshanba"]
     now = now_tashkent()
-    index = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
+    index = int(await db.get_setting("joke_index", "0") or 0) % len(jokes)
     sent_today = await db.get_setting("joke_last_sent_date") == now.strftime("%Y-%m-%d")
     nxt = await next_joke_time(now, sent_today)
     when = f"{nxt.strftime('%d.%m.%Y')} ({WEEKDAYS[nxt.weekday()]}) soat {nxt.strftime('%H:%M')}" if nxt else "-"
     sticker = await db.get_setting("joke_sticker_id")
     await message.answer(
-        f"😄 <b>Navbatdagi hazil: {index + 1}-chi (jami {len(JOKES)} ta)</b>\n"
+        f"😄 <b>Navbatdagi hazil: {index + 1}-chi (jami {len(jokes)} ta)</b>\n"
         f"📅 Yuboriladi: {when}\n"
         f"🎨 Stiker: {'bor' if sticker else 'yo‘q (botga stiker yuboring)'}\n\n"
-        f"{JOKES[index]}\n\n"
-        "Hozir guruhga yuborish: /hazil_yubor\nKeyingi hazilni almashtirish: /hazil_change",
+        f"{jokes[index]}\n\n"
+        "Hozir guruhga yuborish: /hazil_yubor\nKeyingi hazilni almashtirish: /hazil_change\n"
+        "Yangi hazil qo'shish: /hazil_add <matn>",
         parse_mode="HTML",
     )
     if sticker:
@@ -761,8 +762,8 @@ async def boss_cancel_joke(message: Message, command: CommandObject):
 
     await skip_date(target, today)
     nxt = await next_joke_time(now, sent_today)
-    from config import JOKES
-    index = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
+    jokes = await get_all_jokes()
+    index = int(await db.get_setting("joke_index", "0") or 0) % len(jokes)
     await message.answer(
         f"🚫 {target[8:10]}.{target[5:7]}.{target[:4]} kuni hazil <b>yuborilmaydi</b>.\n"
         f"📅 Keyingi hazil: <b>{_fmt_joke_day(nxt) if nxt else '-'}</b> ({index + 1}-hazil — navbat joyida turibdi).\n\n"
@@ -803,20 +804,20 @@ async def boss_change_joke(message: Message, command: CommandObject):
     keyingisiga o'tadi. /hazil_change - ro'yxat (tugmalar), /hazil_change 4 - to'g'ridan-to'g'ri."""
     if not is_boss(message.from_user.id):
         return
-    from config import JOKES
+    jokes = await get_all_jokes()
     arg = (command.args or "").strip()
     if arg:
-        if not arg.isdigit() or not 1 <= int(arg) <= len(JOKES):
-            await message.answer(f"Hazil raqami 1 dan {len(JOKES)} gacha bo'lishi kerak. Masalan: /hazil_change 4")
+        if not arg.isdigit() or not 1 <= int(arg) <= len(jokes):
+            await message.answer(f"Hazil raqami 1 dan {len(jokes)} gacha bo'lishi kerak. Masalan: /hazil_change 4")
             return
         await _set_next_joke(message, int(arg) - 1)
         return
-    current = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
+    current = int(await db.get_setting("joke_index", "0") or 0) % len(jokes)
     rows = [
         [InlineKeyboardButton(
             text=("✅ " if i == current else "") + f"{i + 1}. " + j.replace("\n", " ")[:45],
             callback_data=f"jokeset:{i}")]
-        for i, j in enumerate(JOKES)
+        for i, j in enumerate(jokes)
     ]
     await message.answer(
         "Keyingi safar qaysi hazil yuborilsin? Tanlang (✅ - hozirgi navbat):",
@@ -825,11 +826,11 @@ async def boss_change_joke(message: Message, command: CommandObject):
 
 
 async def _set_next_joke(message: Message, index: int):
-    from config import JOKES
+    jokes = await get_all_jokes()
     await db.set_setting("joke_index", str(index))
     await message.answer(
         f"✅ Keyingi hazil: <b>{index + 1}-chi</b>. Vaqti kelganda shu yuboriladi "
-        f"(keyin navbat {(index + 1) % len(JOKES) + 1}-chiga o'tadi).\n\n{JOKES[index]}\n\n"
+        f"(keyin navbat {(index + 1) % len(jokes) + 1}-chiga o'tadi).\n\n{jokes[index]}\n\n"
         "Qanday yuborilishini ko'rish: /hazil",
         parse_mode="HTML",
     )
@@ -840,8 +841,8 @@ async def boss_change_joke_pick(callback: CallbackQuery):
     if not is_boss(callback.from_user.id):
         await callback.answer()
         return
-    from config import JOKES
-    index = int(callback.data.split(":", 1)[1]) % len(JOKES)
+    jokes = await get_all_jokes()
+    index = int(callback.data.split(":", 1)[1]) % len(jokes)
     await callback.answer("Saqlandi")
     await _set_next_joke(callback.message, index)
 
@@ -850,11 +851,11 @@ async def boss_change_joke_pick(callback: CallbackQuery):
 async def boss_send_joke_now(message: Message):
     if not is_boss(message.from_user.id):
         return
-    from config import JOKES
-    index = int(await db.get_setting("joke_index", "0") or 0) % len(JOKES)
+    jokes = await get_all_jokes()
+    index = int(await db.get_setting("joke_index", "0") or 0) % len(jokes)
     channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
     try:
-        await message.bot.send_message(channel, JOKES[index])
+        await message.bot.send_message(channel, jokes[index])
         sticker = await db.get_setting("joke_sticker_id")
         if sticker:
             await message.bot.send_sticker(channel, sticker)
@@ -866,10 +867,32 @@ async def boss_send_joke_now(message: Message):
             parse_mode="HTML",
         )
         return
-    await db.set_setting("joke_index", str((index + 1) % len(JOKES)))
+    await db.set_setting("joke_index", str((index + 1) % len(jokes)))
     await message.answer(
         f"✅ {index + 1}-hazil guruhga yuborildi. Navbat keyingi hazilga o'tdi "
-        f"(keyingisi: {(index + 1) % len(JOKES) + 1}-chi)."
+        f"(keyingisi: {(index + 1) % len(jokes) + 1}-chi)."
+    )
+
+
+@router.message(Command("hazil_add"), F.chat.type == "private")
+async def boss_add_joke(message: Message, command: CommandObject):
+    """Yangi hazil qo'shish: /hazil_add <matn>. Qo'shilgan hazil ro'yxat oxiriga tushadi,
+    navbatga esa /hazil_change yoki /hazil_kun orqali o'zingiz qo'yasiz."""
+    if not is_boss(message.from_user.id):
+        return
+    text = (command.args or "").strip()
+    if not text:
+        await message.answer(
+            "Yangi hazil matnini yozing: /hazil_add <matn>\n"
+            "Masalan: /hazil_add Vazifani qilmagan ekansiz, men xafa bo'ldim 😢"
+        )
+        return
+    await add_joke(text)
+    jokes = await get_all_jokes()
+    await message.answer(
+        f"✅ Qo'shildi! Endi jami {len(jokes)} ta hazil bor ({len(jokes)}-chi bo'lib qo'shildi).\n\n"
+        f"{text}\n\n"
+        "Ro'yxatni va navbatni ko'rish: /hazil_change",
     )
 
 

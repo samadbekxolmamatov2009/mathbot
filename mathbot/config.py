@@ -205,4 +205,8 @@ JOKES = [
     "Bot + zerikish = 💤\n"
     "Bot + vazifalar = 🔥\n"
     "Xulosa: vazifalarni topshiring, botni uyg'oting! 😄",
+
+    "😮‍💨 Kuzatuvim shuni ko'rsatyaptiki: ko'pchilik A+ testni ko'rib \"keyin ishlayman\" deydi...\n"
+    "\"Keyin\" hali kelmadi chamasi 🕰️\n"
+    "Qani, hoziroq oching va yozma javoblaringizni kiriting! ✍️",
 ]
