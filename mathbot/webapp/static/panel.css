@@ -609,3 +609,7 @@ h1, h2, h3, p { margin: 0; }
 .rk-chip { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
 .rk-chip i { font-style: normal; color: var(--muted); font-weight: 600; }
 .rk-chip.hot { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+
+/* Profil: test qatoridagi natijani o'chirish tugmasi */
+.row-reset { margin-left: 8px; width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; border: 1px solid var(--danger); background: var(--danger-soft); font-size: 15px; cursor: pointer; padding: 0; }
+.row-reset:disabled { opacity: 0.5; }
