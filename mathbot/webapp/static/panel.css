@@ -559,10 +559,10 @@ h1, h2, h3, p { margin: 0; }
 
 
 /* ===== Bo'limlar (O'quvchilar / Hisobotlar) ===== */
-.tabs { display: flex; gap: 8px; padding: 8px 16px 0; }
+.tabs { display: flex; gap: 6px; padding: 8px 16px 0; }
 .tab {
   flex: 1; border: 1px solid var(--line); background: var(--surface); color: var(--muted);
-  border-radius: 12px; padding: 10px 8px; font: inherit; font-weight: 700; font-size: 14px; cursor: pointer;
+  border-radius: 12px; padding: 10px 4px; font: inherit; font-weight: 700; font-size: 13px; cursor: pointer; white-space: nowrap;
 }
 .tab.is-on { background: var(--primary); color: #fff; border-color: var(--primary); }
 
@@ -595,3 +595,17 @@ h1, h2, h3, p { margin: 0; }
 .rep-late { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-size: 11px; font-weight: 700; }
 .rep-reset { margin-top: 9px; width: 100%; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .rep-reset:disabled { opacity: 0.6; }
+
+
+/* ===== Reyting ===== */
+.rk-card { display: flex; gap: 12px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 11px 13px; margin-top: 10px; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.rk-card:active { transform: scale(0.99); }
+.rk-rank { min-width: 34px; text-align: center; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--muted); }
+.rk-main { flex: 1; min-width: 0; }
+.rk-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.rk-name { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.rk-total { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; color: var(--primary); }
+.rk-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.rk-chip { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px; background: var(--surface-2); border: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.rk-chip i { font-style: normal; color: var(--muted); font-weight: 600; }
+.rk-chip.hot { background: var(--warn-soft); color: var(--warn); border-color: transparent; }

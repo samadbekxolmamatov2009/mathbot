@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 <meta name="color-scheme" content="light dark" />
 <title>Admin panel</title>
-<link rel="stylesheet" href="/panel.css?v=6" />
+<link rel="stylesheet" href="/panel.css?v=7" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
@@ -35,6 +35,7 @@
     <nav class="tabs" role="tablist" aria-label="Bo'limlar">
       <button class="tab is-on" id="tabStudents" type="button" role="tab" aria-selected="true">👥 O'quvchilar</button>
       <button class="tab" id="tabReports" type="button" role="tab" aria-selected="false">📊 Hisobotlar</button>
+      <button class="tab" id="tabRanking" type="button" role="tab" aria-selected="false">🏆 Reyting</button>
     </nav>
 
     <!-- Hisobotlar: testlar va davomatlar bo'yicha UMUMIY sonlar (o'quvchilar ro'yxatisiz) -->
@@ -51,6 +52,24 @@
       </div>
       <div class="more-wrap">
         <button class="btn btn-soft" id="reportsMore" type="button" hidden>Yana ko'rish</button>
+      </div>
+    </main>
+
+    <!-- Reyting: ball bo'yicha tartib, ballar tarkibi bilan -->
+    <main class="content" id="rankingView" hidden>
+      <label class="search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        <input id="rankSearch" type="search" inputmode="search" autocomplete="off" placeholder="Ism bo'yicha qidirish" />
+      </label>
+      <p class="hint" style="margin-top:8px">Eng ko'p ball olganlar tepada. 🔥 — hozirgi streak, undagi + — streak uchun olingan bonus.</p>
+      <div class="list-head"><span id="rankCount">&nbsp;</span></div>
+      <section class="list" id="rankList" aria-live="polite"></section>
+      <div class="state" id="rankEmpty" hidden>
+        <div class="state-icon">🔍</div>
+        <h3>Hech kim topilmadi</h3>
+      </div>
+      <div class="more-wrap">
+        <button class="btn btn-soft" id="rankMore" type="button" hidden>Yana ko'rish</button>
       </div>
     </main>
 
@@ -144,6 +163,6 @@
 
   <div class="toast" id="toast" role="status" hidden></div>
 
-  <script src="/panel.js?v=13"></script>
+  <script src="/panel.js?v=14"></script>
 </body>
 </html>
