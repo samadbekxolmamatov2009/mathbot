@@ -23,7 +23,7 @@ from aiohttp import web
 import config
 import database as db
 from answer_check import answers_equivalent
-from config import ALLOWED_ORIGINS, BOT_TOKEN, can_message_student, can_remove_student, can_use_panel, is_admin, is_boss
+from config import ALLOWED_ORIGINS, BOT_TOKEN, can_message_student, can_remove_student, can_reset_submission, can_use_panel, is_admin, is_boss
 from quiz_structure import all_questions, options_for, DEFAULT_TOTAL_QUESTIONS
 from timezone_utils import now_tashkent
 
@@ -1131,6 +1131,75 @@ async def panel_reports_handler(request: web.Request):
     return web.json_response({"items": items, "total": total})
 
 
+async def panel_report_participants_handler(request: web.Request):
+    """Hisobotlar ichida: shu test/A+/davomatni ishlagan o'quvchilar ro'yxati."""
+    user, err = _panel_user(request)
+    if err:
+        return err
+    kind = request.match_info["kind"]
+    if kind not in ("tests", "aplus", "attendance"):
+        return web.json_response({"error": "bad_request"}, status=400)
+    try:
+        test_id = int(request.match_info["id"])
+    except ValueError:
+        return web.json_response({"error": "bad_request"}, status=400)
+    info, people = await db.get_panel_report_participants(kind, test_id)
+    if info is None:
+        return web.json_response({"error": "not_found"}, status=404)
+    return web.json_response({
+        "item": info, "participants": people,
+        "can_reset": kind in ("tests", "aplus") and can_reset_submission(user["id"]),
+    })
+
+
+async def panel_report_reset_handler(request: web.Request):
+    """O'quvchining test/A+ natijasini o'chiradi: u testni qayta ishlay oladi (adashib boshqa
+    topshiriq o'rniga yuborganlarni tuzatish uchun). Faqat Boss (PANEL_RESET_FOR_ADMINS=1 bilan adminlar ham)."""
+    user, err = _panel_user(request)
+    if err:
+        return err
+    if not can_reset_submission(user["id"]):
+        return web.json_response({"error": "not_allowed"}, status=403)
+    kind = request.match_info["kind"]
+    if kind not in ("tests", "aplus"):
+        return web.json_response({"error": "bad_request"}, status=400)
+    try:
+        test_id = int(request.match_info["id"])
+        telegram_id = int(request.match_info["uid"])
+        body = await request.json()
+    except (ValueError, json.JSONDecodeError):
+        return web.json_response({"error": "bad_request"}, status=400)
+    if body.get("confirm") is not True:
+        return web.json_response({"error": "confirm_required"}, status=400)
+
+    info, _people = await db.get_panel_report_participants(kind, test_id)
+    if info is None:
+        return web.json_response({"error": "not_found"}, status=404)
+    student = await db.get_panel_student(telegram_id)
+    old_score = await db.delete_report_submission(kind, test_id, telegram_id)
+    if old_score is None:
+        return web.json_response({"error": "not_found"}, status=404)
+
+    actor = _actor_name(user)
+    label = ("A+ " if kind == "aplus" else "") + str(info.get("name") or info.get("code"))
+    await db.add_panel_note(
+        telegram_id, actor,
+        f"♻️ «{label}» natijasi o'chirildi ({old_score} ball) - testni qayta ishlashi mumkin",
+    )
+    log.warning("Test natijasi o'chirildi: %s | o'quvchi %s | kim: %s (%s) | ball: %s",
+                label, telegram_id, actor, user["id"], old_score)
+    text = (f"♻️ Test natijasi o'chirildi: {label}\nO'quvchi: {(student or {}).get('full_name') or telegram_id} "
+            f"(ID {telegram_id}), ball: {old_score}\nKim tomonidan: {actor}")
+    for boss_id in config.BOSS_IDS:
+        if boss_id == user["id"]:
+            continue
+        try:
+            await _telegram_api("sendMessage", {"chat_id": boss_id, "text": text})
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            pass
+    return web.json_response({"deleted": True, "old_score": old_score})
+
+
 async def panel_students_handler(request: web.Request):
     _, err = _panel_user(request)
     if err:
@@ -1541,6 +1610,8 @@ def create_app() -> web.Application:
     app.router.add_get("/api/group_status", group_status_handler)
     app.router.add_get("/api/panel/summary", panel_summary_handler)
     app.router.add_get("/api/panel/reports", panel_reports_handler)
+    app.router.add_get("/api/panel/report/{kind}/{id}", panel_report_participants_handler)
+    app.router.add_post("/api/panel/report/{kind}/{id}/reset/{uid}", panel_report_reset_handler)
     app.router.add_get("/api/panel/students", panel_students_handler)
     app.router.add_get("/api/panel/student/{id}", panel_student_handler)
     app.router.add_get("/api/panel/student/{id}/{section}", panel_student_section_handler)

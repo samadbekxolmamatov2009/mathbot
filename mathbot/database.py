@@ -1949,3 +1949,59 @@ async def get_panel_reports(kind: str, limit: int = 30, offset: int = 0):
             "finished": bool(finished),
         })
     return items, total_items
+
+
+async def get_panel_report_participants(kind: str, test_id: int):
+    """Bitta test/A+/davomatni ishlagan o'quvchilar (panelda "Hisobotlar" ichida ochiladi).
+    Qaytaradi: (sarlavha ma'lumoti yoki None, o'quvchilar ro'yxati)."""
+    table, _cols, sub_table, fk, _score = _PANEL_REPORT_KINDS[kind]
+    async with aiosqlite.connect(DB_PATH) as db:
+        if kind == "attendance":
+            head_sql = "SELECT id, code, NULL, created_at, NULL FROM attendance_sessions WHERE id = ?"
+            rows_sql = (
+                "SELECT s.telegram_id, u.full_name, NULL, s.submitted_at FROM attendance_records s "
+                "JOIN users u ON u.telegram_id = s.telegram_id AND u.is_registered = 1 "
+                "WHERE s.session_id = ? ORDER BY s.submitted_at ASC"
+            )
+        else:
+            head_sql = f"SELECT id, code, name, created_at, end_time FROM {table} WHERE id = ?"
+            rows_sql = (
+                f"SELECT s.telegram_id, u.full_name, s.score, s.submitted_at FROM {sub_table} s "
+                "JOIN users u ON u.telegram_id = s.telegram_id AND u.is_registered = 1 "
+                f"WHERE s.{fk} = ? ORDER BY s.submitted_at ASC"
+            )
+        async with db.execute(head_sql, (test_id,)) as c:
+            head = await c.fetchone()
+        if not head:
+            return None, []
+        async with db.execute(rows_sql, (test_id,)) as c:
+            rows = await c.fetchall()
+    end_time = head[4]
+    people = []
+    for tid, name, score, submitted_at in rows:
+        late = bool(end_time) and str(submitted_at or "")[:16].replace(" ", "T") > str(end_time)[:16]
+        people.append({
+            "telegram_id": tid, "full_name": name, "score": score,
+            "submitted_at": submitted_at, "late": bool(late) if kind != "attendance" else False,
+        })
+    info = {"id": head[0], "code": head[1], "name": head[2], "created_at": head[3], "end_time": end_time}
+    return info, people
+
+
+async def delete_report_submission(kind: str, test_id: int, telegram_id: int):
+    """O'quvchining test/A+ natijasini o'chiradi (u testni qayta ishlay oladi). Ballar natijadan
+    hisoblanadi (alohida saqlanmaydi), shuning uchun o'chirilgan natijaning bali va streak'dagi
+    hissasi ham o'z-o'zidan olib tashlanadi. O'chirilgan natija balini qaytaradi, topilmasa None."""
+    if kind not in ("tests", "aplus"):
+        return None
+    sub_table = "test_submissions" if kind == "tests" else "aplus_submissions"
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute(
+            f"SELECT score FROM {sub_table} WHERE test_id = ? AND telegram_id = ?", (test_id, telegram_id)
+        ) as c:
+            row = await c.fetchone()
+        if not row:
+            return None
+        await db.execute(f"DELETE FROM {sub_table} WHERE test_id = ? AND telegram_id = ?", (test_id, telegram_id))
+        await db.commit()
+    return row[0]
