@@ -11,6 +11,17 @@
 //   latexToPlain / plainToLatex (sinash uchun ham eksport qilinadi)
 //
 // Kutubxona yuklanmasa (internet/CDN muammosi) - oddiy matn maydoniga o'tiladi.
+//
+// TELEFONDA KLAVIATURA - ma'lum muammolar va ularning sabablari (o'zgartirishdan oldin o'qing!):
+//  1) Ikonka/maydonga bosilganda klaviatura yopilib, darrov yana ochilib qolardi.
+//     SABAB: telefonda bitta bosishdan keyin sintetik "mousedown/mouseup/click" ham keladi va MathLive ularni
+//     klaviaturani qayta ochish uchun ishlatadi. YECHIM: klaviatura holatini pointerup'da BIR marta belgilaymiz
+//     (policy="manual") va 120/450 ms dan keyin qayta tasdiqlaymiz (applyState).
+//  2) "1 ÷ 2" yozilganda 2 kasr ICHIGA emas, uning tashqarisiga/tepasiga tushib qolardi.
+//     SABAB: bosishdan keyin kursorni o'zimiz getOffsetFromPoint() bilan qo'ygan edik - u kasr/ildiz ichida
+//     noto'g'ri pozitsiya berar edi. Takroriy hodisalarni butunlay to'xtatish ham MathLive'ning o'z kursor
+//     joylashtirishini buzgan. YECHIM: kursorni MathLive'ning O'ZI qo'yadi (hodisalar to'xtatilmaydi),
+//     biz faqat klaviatura ochiq/yopiqligini boshqaramiz.
 
 (function (root) {
   "use strict";
@@ -304,34 +315,33 @@
         downX = e.clientX; downY = e.clientY;
         if (isToggleEvent(e)) e.stopImmediatePropagation();
       }, true);
+      // Klaviatura holatini belgilaydi va telefon yuboradigan takroriy hodisalardan keyin qayta tasdiqlaydi.
+      var applyState = function (wantOpen) {
+        act(function () { if (wantOpen) openKb(); else closeKb(); });
+        [120, 450].forEach(function (ms) {
+          setTimeout(function () {
+            if (wantOpen) { if (!kbVisible()) openKb(); }
+            else if (kbVisible() || isFocused()) closeKb();
+          }, ms);
+        });
+      };
       mf.addEventListener("pointerup", function (e) {
         if (isToggleEvent(e)) {
           e.stopImmediatePropagation();
-          act(function () { if (pressedWhileOpen) closeKb(); else openKb(); });
+          applyState(!pressedWhileOpen);
           return;
         }
         var touch = e.pointerType === "touch" || e.pointerType === "pen";
         var moved = Math.abs(e.clientX - downX) > 10 || Math.abs(e.clientY - downY) > 10;
         if (touch && !moved) {
-          // Kursor bosilgan joyga qo'yiladi (matn ichida kursorni siljitish uchun) va klaviatura ochiladi/yopiladi
-          var offset = -1;
-          try { offset = mf.getOffsetFromPoint(e.clientX, e.clientY); } catch (err) {}
-          var setPos = function () { if (offset >= 0) { try { mf.position = offset; } catch (err) {} } };
-          act(function () {
-            if (pressedWhileOpen) { setPos(); closeKb(); }
-            else { openKb(); setPos(); setTimeout(setPos, 60); }
-          });
+          // Kursorni MathLive'ning o'zi bosilgan joyga qo'yadi (kasr/ildiz ichida ham to'g'ri joyga tushadi);
+          // biz esa faqat klaviatura holatini belgilaymiz va uni takroriy hodisalardan keyin qayta tasdiqlaymiz.
+          applyState(!pressedWhileOpen);
         }
       }, true);
       ["mousedown", "mouseup", "touchstart", "touchend", "click"].forEach(function (type) {
         mf.addEventListener(type, function (e) {
           if (isToggleEvent(e)) { e.stopImmediatePropagation(); if (type === "click") e.preventDefault(); return; }
-          // Telefon bosishdan keyin "mousedown/mouseup/click" ham keladi - MathLive ularni klaviaturani qayta
-          // ochish uchun ishlatadi. Bizning harakatdan keyingi qisqa vaqtda ularni to'xtatamiz.
-          if (type !== "touchstart" && type !== "touchend" && Date.now() - lastAct < 700) {
-            e.stopImmediatePropagation();
-            e.preventDefault();
-          }
         }, true);
       });
       return { el: mf, getPlain: getPlain, isMath: true };
