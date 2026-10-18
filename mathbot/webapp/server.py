@@ -1200,6 +1200,19 @@ async def panel_report_reset_handler(request: web.Request):
     return web.json_response({"deleted": True, "old_score": old_score})
 
 
+async def panel_ranking_handler(request: web.Request):
+    """Reyting: o'quvchilar ball bo'yicha kamayish tartibida, ballar tarkibi (A+, oddiy test, davomat, streak) bilan."""
+    _, err = _panel_user(request)
+    if err:
+        return err
+    items, total = await db.get_panel_ranking(
+        search=(request.query.get("search") or "").strip() or None,
+        limit=_int_param(request, "limit", 50, 1, 100),
+        offset=_int_param(request, "offset", 0, 0, 1_000_000),
+    )
+    return web.json_response({"items": items, "total": total})
+
+
 async def panel_students_handler(request: web.Request):
     _, err = _panel_user(request)
     if err:
@@ -1609,6 +1622,7 @@ def create_app() -> web.Application:
     app.router.add_post("/api/aplus/test/{code}/submit", aplus_submit_handler)
     app.router.add_get("/api/group_status", group_status_handler)
     app.router.add_get("/api/panel/summary", panel_summary_handler)
+    app.router.add_get("/api/panel/ranking", panel_ranking_handler)
     app.router.add_get("/api/panel/reports", panel_reports_handler)
     app.router.add_get("/api/panel/report/{kind}/{id}", panel_report_participants_handler)
     app.router.add_post("/api/panel/report/{kind}/{id}/reset/{uid}", panel_report_reset_handler)

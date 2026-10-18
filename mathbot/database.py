@@ -1233,7 +1233,23 @@ async def get_user_coins(telegram_id: int) -> dict:
     }
 
 
-async def get_leaderboard(limit: int = 50):
+def _unified_current_streak(items, get_submitted_at, now_str, strict_since=None) -> int:
+    """O'quvchining HOZIRGI streak uzunligi (oxirgi muddatida topshirilgan testlar ketma-ketligi).
+    _unified_streak_bonuses bilan bir xil qoidalar; farqi - bonus yig'indisi emas, oxirgi qiymat qaytariladi."""
+    streak = 0
+    for created, kind, test_id, end_time in items:
+        strict = strict_since is not None and (created or "") >= strict_since
+        flag = _streak_flag(get_submitted_at(kind, test_id), end_time, now_str, strict)
+        if flag is None:
+            continue
+        streak = streak + 1 if flag else 0
+    return streak
+
+
+async def get_coin_breakdowns():
+    """Ro'yxatdan o'tgan hamma o'quvchi uchun ballar TARKIBI (bitta pas bilan, tezkor):
+    davomat, oddiy test, oddiy test streak bonusi, A+ ball, A+ streak bonusi, qo'lda tuzatish, jami
+    va hozirgi streak uzunligi. get_leaderboard va paneldagi "Reyting" shundan foydalanadi."""
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
         async with db.execute(
@@ -1285,26 +1301,52 @@ async def get_leaderboard(limit: int = 50):
     now_str = _now_deadline_str()
     strict_since = await get_streak_strict_since()
     streak_items = _merge_streak_items(test_rows, aplus_rows)   # hamma o'quvchi uchun bir xil
-    leaderboard = []
+    result = []
     for u in users:
         tid = u["telegram_id"]
         attendance_coins = attendance_counts.get(tid, 0)
         submitted_by_kind = (submitted_set, aplus_submitted_set)
-        test_streak_coins, aplus_streak_coins = _unified_streak_bonuses(
-            streak_items,
-            lambda kind, test_id, _t=tid: submitted_by_kind[kind].get((test_id, _t)),
-            now_str,
-            strict_since,
-        )
-        coins = (
-            attendance_coins + test_scores.get(tid, 0) + test_streak_coins
-            + (aplus_scores.get(tid, 0) or 0) + aplus_streak_coins
-            + (adjustments.get(tid, 0) or 0)
-        )
-        leaderboard.append({"telegram_id": tid, "full_name": u["full_name"], "coins": coins})
+        getter = lambda kind, test_id, _t=tid: submitted_by_kind[kind].get((test_id, _t))
+        test_streak_coins, aplus_streak_coins = _unified_streak_bonuses(streak_items, getter, now_str, strict_since)
+        streak_now = _unified_current_streak(streak_items, getter, now_str, strict_since)
+        tests = test_scores.get(tid, 0) or 0
+        aplus = aplus_scores.get(tid, 0) or 0
+        adj = adjustments.get(tid, 0) or 0
+        result.append({
+            "telegram_id": tid, "full_name": u["full_name"],
+            "attendance": attendance_coins, "tests": tests, "tests_streak": test_streak_coins,
+            "aplus": aplus, "aplus_streak": aplus_streak_coins, "adjustments": adj,
+            "total": attendance_coins + tests + test_streak_coins + aplus + aplus_streak_coins + adj,
+            "streak_now": streak_now,
+        })
+    return result
 
+
+async def get_leaderboard(limit: int = 50):
+    rows = await get_coin_breakdowns()
+    leaderboard = [
+        {"telegram_id": r["telegram_id"], "full_name": r["full_name"], "coins": r["total"]} for r in rows
+    ]
     leaderboard.sort(key=lambda r: (-r["coins"], r["full_name"] or ""))
     return leaderboard[:limit]
+
+
+async def get_panel_ranking(search: str | None, limit: int, offset: int):
+    """Panel "Reyting": ball bo'yicha kamayish tartibida (teng bo'lsa - ism bo'yicha). rank - umumiy o'rin
+    (teng ballilar bir xil o'rinda); qidiruv o'rinni o'zgartirmaydi. Qaytaradi: (sahifa, qidiruvga mos jami)."""
+    rows = await get_coin_breakdowns()
+    rows.sort(key=lambda r: (-r["total"], (r["full_name"] or "").lower()))
+    rank = 0
+    prev = None
+    for i, r in enumerate(rows):
+        if r["total"] != prev:
+            rank = i + 1
+            prev = r["total"]
+        r["rank"] = rank
+    if search:
+        q = search.strip().lower()
+        rows = [r for r in rows if q in (r["full_name"] or "").lower()]
+    return rows[offset:offset + limit], len(rows)
 
 
 # ---------- Rejalashtirilgan xabar (haftalik broadcast) ----------

@@ -362,6 +362,7 @@
   $("refreshBtn").addEventListener("click", function () {
     haptic();
     if (!$("reportsView").hidden) { loadReports(true); return; }
+    if (!$("rankingView").hidden) { loadRanking(true); return; }
     refreshAll();
   });
 
@@ -497,17 +498,81 @@
     if (card) { e.preventDefault(); openReportSheet(rep.kind, card.getAttribute("data-rid"), card.getAttribute("data-title")); }
   });
 
-  function showView(reports) {
-    $("studentsView").hidden = reports;
-    $("reportsView").hidden = !reports;
-    $("tabStudents").classList.toggle("is-on", !reports);
-    $("tabReports").classList.toggle("is-on", reports);
-    $("tabStudents").setAttribute("aria-selected", String(!reports));
-    $("tabReports").setAttribute("aria-selected", String(reports));
-    if (reports && !rep.loaded) { rep.loaded = true; loadReports(true); }
+  // ---------- Reyting bo'limi ----------
+  var rk = { offset: 0, total: 0, loading: false, req: 0, loaded: false, search: "", timer: null };
+
+  function chip(label, value, cls) {
+    return '<span class="rk-chip' + (cls ? " " + cls : "") + '"><i>' + esc(label) + '</i> ' + esc(value) + '</span>';
   }
-  $("tabStudents").addEventListener("click", function () { haptic(); showView(false); });
-  $("tabReports").addEventListener("click", function () { haptic(); showView(true); });
+
+  function rankCard(it) {
+    var medal = it.rank === 1 ? "🥇" : it.rank === 2 ? "🥈" : it.rank === 3 ? "🥉" : "";
+    var bonus = (it.tests_streak || 0) + (it.aplus_streak || 0);
+    var chips = chip("A+", it.aplus) + chip("Test", it.tests) + chip("Davomat", it.attendance) +
+      chip("🔥", it.streak_now + (bonus ? " · +" + bonus : ""), it.streak_now > 0 ? "hot" : "");
+    if (it.adjustments) chips += chip("±", (it.adjustments > 0 ? "+" : "") + it.adjustments);
+    return '<div class="rk-card" data-id="' + it.telegram_id + '" role="button" tabindex="0">' +
+      '<div class="rk-rank">' + (medal || it.rank) + '</div>' +
+      '<div class="rk-main"><div class="rk-top"><span class="rk-name">' + esc(it.full_name || "Ismsiz") + '</span>' +
+      '<span class="rk-total">' + it.total + '</span></div><div class="rk-chips">' + chips + '</div></div></div>';
+  }
+
+  function loadRanking(reset) {
+    if (rk.loading && !reset) return;
+    if (reset) { rk.offset = 0; rk.req++; }
+    var req = rk.req, list = $("rankList"), more = $("rankMore");
+    rk.loading = true; more.disabled = true;
+    if (reset) { list.innerHTML = ""; $("rankEmpty").hidden = true; }
+    var url = "/api/panel/ranking?limit=" + PAGE + "&offset=" + rk.offset + (rk.search ? "&search=" + encodeURIComponent(rk.search) : "");
+    return api(url).then(function (data) {
+      if (req !== rk.req) return;
+      list.insertAdjacentHTML("beforeend", data.items.map(rankCard).join(""));
+      rk.offset += data.items.length; rk.total = data.total;
+      $("rankEmpty").hidden = rk.total > 0;
+      $("rankCount").textContent = rk.total ? rk.offset + " / " + rk.total + " ta o'quvchi" : "";
+      more.hidden = rk.offset >= rk.total;
+    }).catch(function () {
+      if (req !== rk.req) return;
+      haptic("err"); toast("Reytingni yuklab bo'lmadi");
+    }).then(function () {
+      if (req === rk.req) { rk.loading = false; more.disabled = false; }
+    });
+  }
+
+  $("rankMore").addEventListener("click", function () { loadRanking(false); });
+  $("rankSearch").addEventListener("input", function () {
+    clearTimeout(rk.timer);
+    rk.timer = setTimeout(function () {
+      var v = $("rankSearch").value.trim();
+      if (v === rk.search) return;
+      rk.search = v; loadRanking(true);
+    }, 350);
+  });
+  $("rankList").addEventListener("click", function (e) {
+    var card = e.target.closest(".rk-card[data-id]");
+    if (card) openSheet(card.getAttribute("data-id"));
+  });
+  $("rankList").addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var card = e.target.closest(".rk-card[data-id]");
+    if (card) { e.preventDefault(); openSheet(card.getAttribute("data-id")); }
+  });
+
+  function showView(view) {
+    var names = ["students", "reports", "ranking"];
+    names.forEach(function (n) {
+      var cap = n.charAt(0).toUpperCase() + n.slice(1);
+      $(n + "View").hidden = n !== view;
+      var tab = $("tab" + cap);
+      tab.classList.toggle("is-on", n === view);
+      tab.setAttribute("aria-selected", String(n === view));
+    });
+    if (view === "reports" && !rep.loaded) { rep.loaded = true; loadReports(true); }
+    if (view === "ranking" && !rk.loaded) { rk.loaded = true; loadRanking(true); }
+  }
+  $("tabStudents").addEventListener("click", function () { haptic(); showView("students"); });
+  $("tabReports").addEventListener("click", function () { haptic(); showView("reports"); });
+  $("tabRanking").addEventListener("click", function () { haptic(); showView("ranking"); });
   $("reportsMore").addEventListener("click", function () { loadReports(false); });
   document.querySelectorAll("[data-rkind]").forEach(function (b) {
     b.addEventListener("click", function () {
