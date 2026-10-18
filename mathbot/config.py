@@ -1,4 +1,5 @@
 import os
+import re
 
 # Bot tokenini @BotFather dan oling.
 # Terminalga: export BOT_TOKEN="YOUR_TOKEN_HERE"
@@ -21,11 +22,24 @@ ADMIN_IDS = [
 # Hech qanday ro'yxatda (/admins, admin panel va h.k.) ko'rinmaydi va
 # alohida /boss_* buyruqlari hech qayerda reklama qilinmaydi (Bot Menu
 # tugmasiga ham qo'shilmaydi) - faqat shu ID'lar qo'lda buyruq yozsa ishlaydi.
-BOSS_IDS = [
+# Ro'yxat BOSS_IDS muhit o'zgaruvchisidan olinadi (vergul yoki bo'shliq bilan ajratilgan Telegram ID'lar,
+# masalan: BOSS_IDS=8113300476,1586890780). Berilmasa (yoki hech bir to'g'ri ID bo'lmasa) - quyidagi
+# standart ro'yxat. DIQQAT: bot (worker) va veb-servisda BIR XIL qiymat bo'lishi kerak.
+_DEFAULT_BOSS_IDS = [
     8113300476,
     1586890780,
-    506095476,
 ]
+
+
+def _parse_id_list(raw: str) -> list:
+    ids = []
+    for part in re.split(r"[,\s;]+", raw or ""):
+        if part.lstrip("-").isdigit():
+            ids.append(int(part))
+    return ids
+
+
+BOSS_IDS = _parse_id_list(os.getenv("BOSS_IDS", "")) or list(_DEFAULT_BOSS_IDS)
 
 
 def is_admin(user_id: int) -> bool:
