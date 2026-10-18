@@ -707,7 +707,7 @@ async def boss_show_joke(message: Message):
         f"🎨 Stiker: {'bor' if sticker else 'yo‘q (botga stiker yuboring)'}\n\n"
         f"{jokes[index]}\n\n"
         "Hozir guruhga yuborish: /hazil_yubor\nKeyingi hazilni almashtirish: /hazil_change\n"
-        "Yangi hazil qo'shish: /hazil_add <matn>",
+        "Yangi hazil qo'shish: /hazil_add (matn)",
         parse_mode="HTML",
     )
     if sticker:
@@ -876,14 +876,14 @@ async def boss_send_joke_now(message: Message):
 
 @router.message(Command("hazil_add"), F.chat.type == "private")
 async def boss_add_joke(message: Message, command: CommandObject):
-    """Yangi hazil qo'shish: /hazil_add <matn>. Qo'shilgan hazil ro'yxat oxiriga tushadi,
+    """Yangi hazil qo'shish: /hazil_add (matn). Qo'shilgan hazil ro'yxat oxiriga tushadi,
     navbatga esa /hazil_change yoki /hazil_kun orqali o'zingiz qo'yasiz."""
     if not is_boss(message.from_user.id):
         return
     text = (command.args or "").strip()
     if not text:
         await message.answer(
-            "Yangi hazil matnini yozing: /hazil_add <matn>\n"
+            "Yangi hazil matnini yozing: /hazil_add (matn)\n"
             "Masalan: /hazil_add Vazifani qilmagan ekansiz, men xafa bo'ldim 😢"
         )
         return
