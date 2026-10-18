@@ -312,7 +312,16 @@
         }
         var touch = e.pointerType === "touch" || e.pointerType === "pen";
         var moved = Math.abs(e.clientX - downX) > 10 || Math.abs(e.clientY - downY) > 10;
-        if (touch && !moved) act(function () { if (pressedWhileOpen) closeKb(); else openKb(); });
+        if (touch && !moved) {
+          // Kursor bosilgan joyga qo'yiladi (matn ichida kursorni siljitish uchun) va klaviatura ochiladi/yopiladi
+          var offset = -1;
+          try { offset = mf.getOffsetFromPoint(e.clientX, e.clientY); } catch (err) {}
+          var setPos = function () { if (offset >= 0) { try { mf.position = offset; } catch (err) {} } };
+          act(function () {
+            if (pressedWhileOpen) { setPos(); closeKb(); }
+            else { openKb(); setPos(); setTimeout(setPos, 60); }
+          });
+        }
       }, true);
       ["mousedown", "mouseup", "touchstart", "touchend", "click"].forEach(function (type) {
         mf.addEventListener(type, function (e) {
