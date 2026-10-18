@@ -368,7 +368,7 @@
   // ---------- Hisobotlar bo'limi (testlar / A+ / davomat: faqat umumiy sonlar) ----------
   var rep = { kind: "tests", offset: 0, total: 0, loading: false, req: 0, loaded: false };
 
-  function fmtDate(v) {
+  function fmtShort(v) {
     var m = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/);
     if (!m) return "";
     var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) + 5 * 3600 * 1000);   // UTC -> Toshkent
@@ -384,11 +384,12 @@
     var note = (att ? "qatnashdi" : "ishladi") + " · " + pct + "%";
     if (!att && it.avg != null) note += " · o'rtacha ball " + it.avg;
     if (!it.finished) note += " · davom etmoqda";
-    return '<div class="rep-card"><div class="rep-top"><span class="rep-title">' + esc(title) +
-      '</span><span class="rep-date">' + esc(fmtDate(it.created_at)) + '</span></div>' +
+    return '<div class="rep-card is-click" data-rid="' + it.id + '" data-title="' + esc(title) + '" role="button" tabindex="0"><div class="rep-top"><span class="rep-title">' + esc(title) +
+      '</span><span class="rep-date">' + esc(fmtShort(it.created_at)) + '</span></div>' +
       '<div class="rep-nums"><span class="rep-count">' + it.done + '<small> / ' + it.total + '</small></span>' +
       '<span class="rep-note">' + esc(note) + '</span></div>' +
-      '<div class="rep-bar"><i style="width:' + pct + '%"></i></div></div>';
+      '<div class="rep-bar"><i style="width:' + pct + '%"></i></div>' +
+      '<div class="rep-more">Kimlar ' + (att ? "qatnashgani" : "ishlagani") + ' ›</div></div>';
   }
 
   function loadReports(reset) {
@@ -410,6 +411,91 @@
       if (req === rep.req) { rep.loading = false; more.disabled = false; }
     });
   }
+
+
+  // ---------- Hisobot tafsiloti: shu testni ishlagan o'quvchilar (+ natijani o'chirish) ----------
+  var RESET_ERRORS = {
+    not_allowed: "Sizda natijani o'chirish uchun ruxsat yo'q.",
+    not_found: "Natija topilmadi (allaqachon o'chirilgan bo'lishi mumkin).",
+    telegram_unreachable: "Server bilan bog'lanib bo'lmadi. Qayta urinib ko'ring.",
+  };
+
+  function fmtScore(v) { return v == null ? "" : String(v); }
+
+  function openReportSheet(kind, rid, title) {
+    haptic();
+    $("sheetTitle").textContent = "Natijalar";
+    current = null;
+    sheetBody.innerHTML =
+      '<div class="rep-sheet-head"><h3>' + esc(title) + '</h3></div>' +
+      '<div class="sk" style="height:56px;margin-top:12px;border-radius:14px"></div>' +
+      '<div class="sk" style="height:56px;margin-top:10px;border-radius:14px"></div>' +
+      '<div class="sk" style="height:56px;margin-top:10px;border-radius:14px"></div>';
+    sheet.hidden = false; backdrop.hidden = false;
+    document.body.classList.add("sheet-open");
+    $("sheetScroll").scrollTop = 0;
+    if (tg && tg.BackButton) { try { tg.BackButton.show(); } catch (e) {} }
+
+    api("/api/panel/report/" + kind + "/" + rid).then(function (data) {
+      renderReportSheet(kind, rid, title, data);
+    }).catch(function (e) {
+      var info = errorInfo(e);
+      sheetBody.innerHTML = '<div class="state"><div class="state-icon">⚠️</div><h3>' + esc(info[0]) + "</h3><p>" + esc(info[1]) + "</p></div>";
+    });
+  }
+
+  function renderReportSheet(kind, rid, title, data) {
+    var att = kind === "attendance";
+    var rows = data.participants.map(function (p) {
+      var badge = p.late ? ' <span class="rep-late">kech</span>' : "";
+      var score = att ? "" : '<span class="rep-score">' + esc(fmtScore(p.score)) + ' ball</span>';
+      var btn = data.can_reset
+        ? '<button class="rep-reset" type="button" data-uid="' + p.telegram_id + '" data-name="' + esc(p.full_name || "O'quvchi") + '" data-score="' + esc(fmtScore(p.score)) + '">♻️ Qayta ishlashga ruxsat</button>'
+        : "";
+      return '<div class="rep-person" data-uid="' + p.telegram_id + '">' +
+        '<div class="rep-person-top"><span class="rep-person-name">' + esc(p.full_name || "Ismsiz") + badge + '</span>' + score + '</div>' +
+        '<div class="rep-person-sub">' + esc(fmtShort(p.submitted_at)) + '</div>' + btn + '</div>';
+    }).join("");
+    sheetBody.innerHTML =
+      '<div class="rep-sheet-head"><h3>' + esc(title) + '</h3>' +
+      '<p><b id="repCount">' + data.participants.length + '</b> ta o\'quvchi ' + (att ? "qatnashgan" : "ishlagan") + '</p></div>' +
+      (rows || '<div class="state"><div class="state-icon">📭</div><h3>Hali hech kim</h3></div>') +
+      (data.can_reset ? '<p class="hint" style="margin-top:14px">♻️ tugmasi o\'quvchining shu test natijasini bazadan o\'chiradi: ball ham ayriladi va u testni qayta ishlay oladi.</p>' : "");
+
+    sheetBody.querySelectorAll(".rep-reset").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var name = b.getAttribute("data-name"), uid = b.getAttribute("data-uid"), sc = b.getAttribute("data-score");
+        var q = name + " ning «" + title + "» natijasi (" + sc + " ball) o'chiriladi va u testni qayta ishlay oladi. Ballari ham shunga mos kamayadi. Davom etasizmi?";
+        var go = function () {
+          b.disabled = true; b.textContent = "O'chirilmoqda...";
+          api("/api/panel/report/" + kind + "/" + rid + "/reset/" + encodeURIComponent(uid),
+              { method: "POST", body: { confirm: true } })
+            .then(function () {
+              haptic("ok"); toast("Natija o'chirildi — qayta ishlashi mumkin");
+              var row = b.closest(".rep-person"); if (row) row.remove();
+              var c = $("repCount"); if (c) c.textContent = Math.max(0, (parseInt(c.textContent, 10) || 1) - 1);
+              rep.loaded = true; loadReports(true);       // orqadagi ro'yxatdagi sonlarni yangilaymiz
+            })
+            .catch(function (e) {
+              haptic("err"); toast(RESET_ERRORS[e.message] || "O'chirib bo'lmadi, qayta urinib ko'ring");
+              b.disabled = false; b.textContent = "♻️ Qayta ishlashga ruxsat";
+            });
+        };
+        if (tg && tg.showConfirm) tg.showConfirm(q, function (ok) { if (ok) go(); });
+        else if (window.confirm(q)) go();
+      });
+    });
+  }
+
+  $("reportsList").addEventListener("click", function (e) {
+    var card = e.target.closest(".rep-card[data-rid]");
+    if (card) openReportSheet(rep.kind, card.getAttribute("data-rid"), card.getAttribute("data-title"));
+  });
+  $("reportsList").addEventListener("keydown", function (e) {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var card = e.target.closest(".rep-card[data-rid]");
+    if (card) { e.preventDefault(); openReportSheet(rep.kind, card.getAttribute("data-rid"), card.getAttribute("data-title")); }
+  });
 
   function showView(reports) {
     $("studentsView").hidden = reports;
@@ -471,6 +557,7 @@
 
   function openSheet(id) {
     haptic();
+    $("sheetTitle").textContent = "Profil";
     current = { id: id, tab: "tests", sections: {} };
     sheetBody.innerHTML =
       '<div class="profile-head"><div class="sk" style="width:58px;height:58px;border-radius:18px"></div>' +

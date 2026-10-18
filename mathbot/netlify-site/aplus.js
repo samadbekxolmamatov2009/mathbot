@@ -98,10 +98,40 @@ function haptic() {
 }
 
 function updateProgress() {
+  syncSubmitState();
   const count = Object.values(answers).filter((v) => v && v.trim()).length;
   const pct = fields.length ? Math.round((count / fields.length) * 100) : 0;
   els.progressFill.style.width = `${pct}%`;
   els.progressLabel.textContent = `${count} / ${fields.length} javob berildi`;
+}
+
+
+// Hamma javob belgilanmaguncha "Yakunlash" yopiq turadi (adashib yuborib yubormaslik uchun).
+function submitProgress() {
+  const total = fields.length;
+  const count = fields.filter((k) => answers[k] && answers[k].trim()).length;
+  return { total, count, complete: total > 0 && count === total };
+}
+
+function syncSubmitState() {
+  const { total, count, complete } = submitProgress();
+  const label = complete ? "Yakunlash" : `Javoblar: ${count}/${total}`;
+  if (isTelegram) {
+    try {
+      const mb = tg.MainButton;
+      const tp = tg.themeParams || {};
+      mb.setParams({
+        text: label,
+        color: complete ? tp.button_color || "#3d6ea5" : tp.hint_color || "#9aa5b1",
+        text_color: tp.button_text_color || "#ffffff",
+        is_active: complete,
+      });
+      if (complete) mb.enable(); else mb.disable();
+    } catch (e) {}
+  } else if (els.submitBtn) {
+    els.submitBtn.disabled = !complete;
+    els.submitBtn.textContent = label;
+  }
 }
 
 function renderQuestions() {
@@ -149,6 +179,7 @@ function renderQuestions() {
     els.submitBar.hidden = false;
     els.submitBtn.addEventListener("click", submitTest);
   }
+  syncSubmitState();
 }
 
 function formatDateTime(value) {
@@ -216,6 +247,7 @@ function renderResult(score, total, details, late) {
 }
 
 async function submitTest() {
+  if (!submitProgress().complete) return;       // hamma javob kiritilmaguncha yuborilmaydi
   if (isTelegram) tg.MainButton.showProgress();
   els.submitBtn.disabled = true;
 

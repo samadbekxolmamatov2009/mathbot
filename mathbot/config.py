@@ -65,6 +65,15 @@ def can_message_student(user_id) -> bool:
     return is_boss(user_id) or (PANEL_MESSAGE_FOR_ADMINS and can_use_panel(user_id))
 
 
+# Paneldan o'quvchining test/A+ natijasini o'chirish (u testni qayta ishlay oladi): hozircha faqat Boss.
+# Adminlarga ochish uchun PANEL_RESET_FOR_ADMINS=1 qo'ying.
+PANEL_RESET_FOR_ADMINS = os.getenv("PANEL_RESET_FOR_ADMINS", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def can_reset_submission(user_id) -> bool:
+    return is_boss(user_id) or (PANEL_RESET_FOR_ADMINS and can_use_panel(user_id))
+
+
 def can_remove_student(user_id) -> bool:
     return is_boss(user_id) or (PANEL_REMOVE_FOR_ADMINS and can_use_panel(user_id))
 
