@@ -779,48 +779,8 @@
       return '<div class="row"><div class="row-main"><div class="row-title">Dars · ' + esc(r.name) + '</div><div class="row-sub">' + fmtDate(r.at) + "</div></div>" +
         '<span class="pill ' + (r.attended ? "ok" : "high") + '">' + (r.attended ? "Qatnashdi" : "Qatnashmadi") + "</span></div>";
     }
-    var reset = (current && current.data && current.data.can_reset && r.tid)
-      ? '<button class="row-reset" type="button" data-tid="' + r.tid + '" data-kind="' + kind + '" data-name="' + esc(r.name || "Test") + '" data-score="' + r.score + '" aria-label="Natijani o\'chirish" title="Natijani o\'chirish — qayta ishlashga ruxsat">♻️</button>'
-      : "";
     return '<div class="row"><div class="row-main"><div class="row-title">' + esc(r.name || "Test") + '</div><div class="row-sub">' + fmtDate(r.at) + "</div></div>" +
-      '<span class="pill ' + pillLevel(r.score, r.total) + '">' + r.score + " / " + (r.total || "?") + "</span>" + reset + "</div>";
-  }
-
-  // O'quvchi profilida: bitta test natijasini o'chirish (u testni qayta ishlay oladi)
-  function reloadProfile() {
-    if (!current) return;
-    var id = current.id, tab = current.tab, scroller = $("sheetScroll"), top = scroller.scrollTop;
-    api("/api/panel/student/" + encodeURIComponent(id)).then(function (data) {
-      if (!current || current.id !== id) return;
-      current.data = data;
-      ["tests", "aplus", "attendance"].forEach(function (k) { current.sections[k] = data[k]; });
-      current.tab = tab;
-      renderProfile();
-      scroller.scrollTop = top;
-    }).catch(function () {});
-  }
-
-  function resetOneResult(btn) {
-    var kind = btn.getAttribute("data-kind"), tid = btn.getAttribute("data-tid");
-    var name = btn.getAttribute("data-name"), sc = btn.getAttribute("data-score");
-    var uid = current.id;
-    var q = "«" + name + "» natijasi (" + sc + " ball) o'chiriladi va o'quvchi uni qayta ishlay oladi.\n\n" +
-      "Diqqat: o'quvchining ballari va streaki qayta hisoblanadi. Agar bu test muddati o'tgan bo'lsa, qayta ishlaganda u KECH hisoblanadi (ball 75%) va streak shu joyda uziladi — keyingi testlarning streak bonuslari ham o'zgaradi. Davom etasizmi?";
-    var go = function () {
-      btn.disabled = true;
-      api("/api/panel/report/" + kind + "/" + encodeURIComponent(tid) + "/reset/" + encodeURIComponent(uid),
-          { method: "POST", body: { confirm: true } })
-        .then(function () {
-          haptic("ok"); toast("Natija o'chirildi — qayta ishlashi mumkin");
-          reloadProfile();
-        })
-        .catch(function (e) {
-          haptic("err"); toast(RESET_ERRORS[e.message] || "O'chirib bo'lmadi, qayta urinib ko'ring");
-          btn.disabled = false;
-        });
-    };
-    if (tg && tg.showConfirm) tg.showConfirm(q, function (ok) { if (ok) go(); });
-    else if (window.confirm(q)) go();
+      '<span class="pill ' + pillLevel(r.score, r.total) + '">' + r.score + " / " + (r.total || "?") + "</span></div>";
   }
 
   function renderTabs() {
@@ -835,9 +795,6 @@
       html += '<button class="rows-more" type="button" id="rowsMore">Yana ko\'rish (' + (sec.total - sec.items.length) + ")</button>";
     }
     $("tabPanel").innerHTML = html;
-    Array.prototype.forEach.call($("tabPanel").querySelectorAll(".row-reset"), function (b) {
-      b.addEventListener("click", function () { resetOneResult(b); });
-    });
     var more = $("rowsMore");
     if (more) more.addEventListener("click", function () { loadMoreSection(kind, more); });
   }

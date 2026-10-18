@@ -1255,7 +1255,6 @@ async def panel_student_handler(request: web.Request):
         # O'quvchiga botdan xabar yuborish faqat Boss'ga ruxsat (adminlar ko'radi va izoh yozadi xolos)
         "can_message": can_message_student(user["id"]),
         "can_remove": can_remove_student(user["id"]),
-        "can_reset": can_reset_submission(user["id"]),
     }
     for section in ("tests", "aplus", "attendance"):
         items, total = await db.get_panel_student_section(telegram_id, section, 6, 0)

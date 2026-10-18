@@ -1757,17 +1757,17 @@ async def get_panel_student_section(telegram_id: int, section: str, limit: int, 
                 "SELECT COUNT(*) FROM test_submissions WHERE telegram_id = ?", (telegram_id,))
             sql = (
                 "SELECT COALESCE(t.name, t.code) AS name, ts.score, t.total_questions AS total, "
-                "ts.submitted_at AS at, ts.test_id AS tid FROM test_submissions ts JOIN tests t ON t.id = ts.test_id "
+                "ts.submitted_at AS at FROM test_submissions ts JOIN tests t ON t.id = ts.test_id "
                 "WHERE ts.telegram_id = ? ORDER BY ts.submitted_at DESC LIMIT ? OFFSET ?")
-            cols = ("name", "score", "total", "at", "tid")
+            cols = ("name", "score", "total", "at")
         elif section == "aplus":
             count_sql, count_args = (
                 "SELECT COUNT(*) FROM aplus_submissions WHERE telegram_id = ?", (telegram_id,))
             sql = (
                 "SELECT COALESCE(t.name, t.code) AS name, s.score, t.question_count AS total, "
-                "s.submitted_at AS at, s.test_id AS tid FROM aplus_submissions s JOIN aplus_tests t ON t.id = s.test_id "
+                "s.submitted_at AS at FROM aplus_submissions s JOIN aplus_tests t ON t.id = s.test_id "
                 "WHERE s.telegram_id = ? ORDER BY s.submitted_at DESC LIMIT ? OFFSET ?")
-            cols = ("name", "score", "total", "at", "tid")
+            cols = ("name", "score", "total", "at")
         else:
             since = "(SELECT registered_at FROM users WHERE telegram_id = ?)"
             count_sql, count_args = (
