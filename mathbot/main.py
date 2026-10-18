@@ -18,7 +18,6 @@ from config import (
     BOT_TOKEN,
     JOKE_DAYS,
     JOKE_TIME,
-    JOKES,
     REPORT_CHANNEL,
     WEBAPP_HOST,
     WEBAPP_PORT,
@@ -42,7 +41,7 @@ async def keep_webapp_alive_loop():
                 logging.exception("Keep-alive ping muvaffaqiyatsiz")
             await asyncio.sleep(KEEP_ALIVE_INTERVAL_SECONDS)
 import database as db
-from joke_schedule import get_overrides as get_joke_overrides, is_joke_date
+from joke_schedule import get_all_jokes, get_overrides as get_joke_overrides, is_joke_date
 from database import init_db
 from handlers import registration, admin, menu, attendance, tests, aplus, special_task, boss
 from middlewares import SubscriptionCheckMiddleware
@@ -239,16 +238,17 @@ async def send_broadcast_schedule_loop(bot: Bot):
                 and await db.get_setting("joke_last_sent_date") != today
             ):
                 await db.set_setting("joke_last_sent_date", today)
+                jokes = await get_all_jokes()
                 index = int(await db.get_setting("joke_index", "0") or 0)
                 channel = await db.get_setting("report_channel_id", REPORT_CHANNEL)
                 try:
-                    await bot.send_message(channel, JOKES[index % len(JOKES)])
+                    await bot.send_message(channel, jokes[index % len(jokes)])
                     sticker = await db.get_setting("joke_sticker_id")
                     if sticker:
                         await bot.send_sticker(channel, sticker)
                 except Exception:
                     logging.exception("Hazilni guruhga yuborishda xatolik")
-                await db.set_setting("joke_index", str((index + 1) % len(JOKES)))
+                await db.set_setting("joke_index", str((index + 1) % len(jokes)))
         except Exception:
             logging.exception("Hazil yuborish jarayonida xatolik yuz berdi")
         await asyncio.sleep(BROADCAST_CHECK_INTERVAL)
