@@ -258,7 +258,6 @@
       var mf = document.createElement("math-field");
       mf.className = "aplus-input aplus-mathfield";
       mf.setAttribute("placeholder", placeholder);
-      mf.setAttribute("math-virtual-keyboard-policy", "auto");
       try { mf.smartMode = false; } catch (e) {}
       try { mf.menuItems = []; } catch (e) {}
       if (opts.prefill) {
@@ -267,19 +266,64 @@
       var getPlain = function () { return latexToPlain(mf.value); };
       mf.addEventListener("input", function () { onChange(getPlain()); });
 
-      // Telefonda: maydon ustiga bir marta bosilsa klaviatura ochiladi, YANA bir marta bosilsa yopiladi.
-      // (Boshqa maydonga bosilsa - klaviatura ochiq qoladi va o'sha maydonga o'tadi.)
-      var wasOpenOnPress = false;
-      var isTouch = function (e) { return e.pointerType === "touch" || e.pointerType === "pen"; };
-      mf.addEventListener("pointerdown", function (e) {
-        var kb = root.mathVirtualKeyboard;
-        wasOpenOnPress = !!(kb && kb.visible) && isTouch(e) && (document.activeElement === mf || mf.matches(":focus-within"));
-      }, true);
-      mf.addEventListener("click", function () {
-        if (!wasOpenOnPress) return;
-        wasOpenOnPress = false;
+      // Klaviaturani O'ZIMIZ boshqaramiz (policy="manual"): MathLive'ning avtomatik ochilishi/yopilishi
+      // ba'zi telefonlarda ikonka bosilganda adashar edi. Qoidalar:
+      //   - telefonda maydonga bosish: yopiq bo'lsa ochadi; shu maydon faol va klaviatura ochiq bo'lsa - yopadi;
+      //   - maydon ichidagi klaviatura ikonkasi: shu maydon faol va klaviatura ochiq bo'lsa - yopadi, aks holda ochadi
+      //     (boshqa maydonning ikonkasi bosilsa - klaviatura ochiq qoladi va o'sha maydonga o'tadi).
+      mf.setAttribute("math-virtual-keyboard-policy", "manual");
+      var kbVisible = function () { return !!(root.mathVirtualKeyboard && root.mathVirtualKeyboard.visible); };
+      var isFocused = function () { return document.activeElement === mf || mf.matches(":focus-within"); };
+      var openKb = function () {
+        try { mf.focus(); } catch (e) {}
+        try { root.mathVirtualKeyboard && root.mathVirtualKeyboard.show(); } catch (e) {}
+      };
+      var closeKb = function () {
         hideMathKeyboard();
         try { mf.blur(); } catch (e) {}
+      };
+      var isToggleEvent = function (e) {
+        var path = e.composedPath ? e.composedPath() : [];
+        for (var i = 0; i < path.length; i++) {
+          var el = path[i];
+          if (el && el.getAttribute && /virtual-keyboard-toggle/.test(el.getAttribute("part") || "")) return true;
+        }
+        return false;
+      };
+      // Telefonlarda bitta bosishdan bir nechta hodisa (pointerup, sintetik click) kelishi mumkin -
+      // shuning uchun harakat pointerup'da BIR marta bajariladi va qisqa muddat ichida takrorlanmaydi.
+      var pressedWhileOpen = false, downX = 0, downY = 0, lastAct = 0;
+      var act = function (fn) {
+        var now = Date.now();
+        if (now - lastAct < 350) return;
+        lastAct = now;
+        fn();
+      };
+      mf.addEventListener("pointerdown", function (e) {
+        pressedWhileOpen = kbVisible() && isFocused();
+        downX = e.clientX; downY = e.clientY;
+        if (isToggleEvent(e)) e.stopImmediatePropagation();
+      }, true);
+      mf.addEventListener("pointerup", function (e) {
+        if (isToggleEvent(e)) {
+          e.stopImmediatePropagation();
+          act(function () { if (pressedWhileOpen) closeKb(); else openKb(); });
+          return;
+        }
+        var touch = e.pointerType === "touch" || e.pointerType === "pen";
+        var moved = Math.abs(e.clientX - downX) > 10 || Math.abs(e.clientY - downY) > 10;
+        if (touch && !moved) act(function () { if (pressedWhileOpen) closeKb(); else openKb(); });
+      }, true);
+      ["mousedown", "mouseup", "touchstart", "touchend", "click"].forEach(function (type) {
+        mf.addEventListener(type, function (e) {
+          if (isToggleEvent(e)) { e.stopImmediatePropagation(); if (type === "click") e.preventDefault(); return; }
+          // Telefon bosishdan keyin "mousedown/mouseup/click" ham keladi - MathLive ularni klaviaturani qayta
+          // ochish uchun ishlatadi. Bizning harakatdan keyingi qisqa vaqtda ularni to'xtatamiz.
+          if (type !== "touchstart" && type !== "touchend" && Date.now() - lastAct < 700) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+          }
+        }, true);
       });
       return { el: mf, getPlain: getPlain, isMath: true };
     }
