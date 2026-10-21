@@ -1,6 +1,7 @@
 import asyncio
 import os
 import random
+import re
 import tempfile
 
 from aiogram import Router, F
@@ -475,54 +476,31 @@ async def process_attendance_code(message: Message, state: FSMContext):
 
 # ---------- O'quvchi: ketma-ket qatnashmaslik sababini yozish ----------
 
+_ABSENCE_CODE_LIKE_RE = re.compile(r"^\d{1,3}$")
+
+
 @router.message(HasPendingAbsenceReason(), F.text, ~F.text.in_(NAV_BUTTON_TEXTS))
-async def process_absence_reason(message: Message, state: FSMContext):
-    """Darhol yubormaydi - avval o'quvchiga yozganini qaytarib ko'rsatadi va tasdiqlatadi.
-    Shunda tasodifan boshqa narsa (masalan davomat kodi) yozib yuborilgan bo'lsa, o'zi payqab
-    tuzatadi - bot hech narsani taxmin qilmaydi, faqat ko'rsatadi."""
+async def process_absence_reason(message: Message, bot):
+    """Faqat DAVOMAT KODIGA o'xshagan javobda (1-3 xonali son, masalan "99") muloyim
+    tushuntirib qayta so'raydi - o'quvchi ko'pincha shuni sabab o'rniga adashib yuboradi.
+    Boshqa har qanday matn (haqiqiy sabab) darhol Boss/adminga yetkaziladi."""
     pending = await db.get_pending_absence_reason(message.from_user.id)
     if not pending:
         return
-    await state.update_data(absence_reason_draft=message.text)
-    await message.answer(
-        f"Sababingiz: <b>{_esc(message.text)}</b>\n\nShuni ustozingizga shunday yuboraymi?",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(text="✅ Ha, yuborilsin", callback_data="absreason:send"),
-            InlineKeyboardButton(text="✍️ Qayta yozaman", callback_data="absreason:retry"),
-        ]]),
-    )
 
+    text = message.text.strip()
+    if _ABSENCE_CODE_LIKE_RE.match(text):
+        await message.answer(
+            "🤔 Bu davomat kodiga o'xshab qoldi, sabab emas.\n"
+            "Menga darsga <b>kelmaganingizning sababini so'z bilan</b> yozib yuboring "
+            "(masalan: \"kasal edim\", \"ishim bor edi\"):",
+            parse_mode="HTML",
+        )
+        return  # sabab hali so'ralmagan holatda qoladi - qayta yozsa shu handler yana ishlaydi
 
-@router.callback_query(F.data == "absreason:retry")
-async def absence_reason_retry(callback: CallbackQuery, state: FSMContext):
-    await state.update_data(absence_reason_draft=None)
-    await callback.answer()
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-    await callback.message.answer("Yaxshi, sababingizni qaytadan yozib yuboring:")
+    await db.clear_pending_absence_reason(message.from_user.id)
 
-
-@router.callback_query(F.data == "absreason:send")
-async def absence_reason_confirm_send(callback: CallbackQuery, state: FSMContext, bot):
-    data = await state.get_data()
-    text = data.get("absence_reason_draft")
-    pending = await db.get_pending_absence_reason(callback.from_user.id)
-    if not text or not pending:
-        await callback.answer()
-        return
-
-    await db.clear_pending_absence_reason(callback.from_user.id)
-    await state.update_data(absence_reason_draft=None)
-    await callback.answer("Yuborildi ✅")
-    try:
-        await callback.message.edit_reply_markup(reply_markup=None)
-    except Exception:
-        pass
-
-    user = await db.get_user(callback.from_user.id)
+    user = await db.get_user(message.from_user.id)
     name = (user["full_name"] if user else None) or "Noma'lum"
     course = COURSES.get(user["course"], {}).get("name", user["course"]) if user else "Noma'lum"
 
@@ -530,15 +508,15 @@ async def absence_reason_confirm_send(callback: CallbackQuery, state: FSMContext
         try:
             await bot.send_message(
                 admin_id,
-                f"⚠️ <b>{name}</b> ({course}, ID: <code>{callback.from_user.id}</code>) "
+                f"⚠️ <b>{name}</b> ({course}, ID: <code>{message.from_user.id}</code>) "
                 f"ketma-ket {CONSECUTIVE_MISS_THRESHOLD} kun darsga qatnashmadi.\n\n"
-                f"📝 Sababi: {_esc(text)}",
+                f"📝 Sababi: {_esc(message.text)}",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                    InlineKeyboardButton(text="✍️ Javob yozish", callback_data=f"absreply:{callback.from_user.id}")
+                    InlineKeyboardButton(text="✍️ Javob yozish", callback_data=f"absreply:{message.from_user.id}")
                 ]]),
             )
         except Exception:
             pass
 
-    await callback.message.answer("✅ Rahmat, sababingiz ustozingizga yetkazildi.")
+    await message.answer("✅ Rahmat, sababingiz ustozingizga yetkazildi.")

@@ -1131,6 +1131,29 @@ async def panel_reports_handler(request: web.Request):
     return web.json_response({"items": items, "total": total})
 
 
+async def panel_aplus_answers_handler(request: web.Request):
+    """Bitta o'quvchining A+ testdagi savol-savol natijasi (📊 Hisobotlar ichida, "Javoblarni
+    ko'rish" kengaytirilganda so'raladi - hammasi oldindan yuklanmaydi)."""
+    _, err = _panel_user(request)
+    if err:
+        return err
+    try:
+        test_id = int(request.match_info["id"])
+        telegram_id = int(request.match_info["uid"])
+    except ValueError:
+        return web.json_response({"error": "bad_request"}, status=400)
+    test = await db.get_aplus_test_by_id(test_id)
+    if not test:
+        return web.json_response({"error": "not_found"}, status=404)
+    sub = await db.has_submitted_aplus_test(test_id, telegram_id)
+    if not sub:
+        return web.json_response({"error": "not_found"}, status=404)
+    correct = json.loads(test["answers"])
+    user_answers = json.loads(sub["answers"])
+    details = _aplus_build_details(correct, user_answers, test["question_count"])
+    return web.json_response({"details": details})
+
+
 async def panel_report_participants_handler(request: web.Request):
     """Hisobotlar ichida: shu test/A+/davomatni ishlagan o'quvchilar ro'yxati."""
     user, err = _panel_user(request)
@@ -1626,6 +1649,7 @@ def create_app() -> web.Application:
     app.router.add_get("/api/panel/reports", panel_reports_handler)
     app.router.add_get("/api/panel/report/{kind}/{id}", panel_report_participants_handler)
     app.router.add_post("/api/panel/report/{kind}/{id}/reset/{uid}", panel_report_reset_handler)
+    app.router.add_get("/api/panel/report/aplus/{id}/answers/{uid}", panel_aplus_answers_handler)
     app.router.add_get("/api/panel/students", panel_students_handler)
     app.router.add_get("/api/panel/student/{id}", panel_student_handler)
     app.router.add_get("/api/panel/student/{id}/{section}", panel_student_section_handler)

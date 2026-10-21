@@ -423,6 +423,34 @@
 
   function fmtScore(v) { return v == null ? "" : String(v); }
 
+
+  function answerRow(d) {
+    var cls = d.is_correct ? "ok" : "wrong";
+    var right = d.is_correct
+      ? esc(d.your_answer == null ? "" : d.your_answer)
+      : "siz: " + esc(d.your_answer == null || d.your_answer === "" ? "\u2014" : d.your_answer) +
+        "  \u2192  to'g'ri: " + esc(d.correct_answer == null ? "\u2014" : d.correct_answer);
+    return '<div class="ans-row ' + cls + '"><span class="ans-key">' + (d.is_correct ? "\u2705" : "\u274c") + " " + esc(d.key) +
+      '</span><span class="ans-val">' + right + "</span></div>";
+  }
+
+  function toggleAnswers(kind, rid, btn) {
+    var box = btn.nextElementSibling;
+    if (!box.hidden) { box.hidden = true; btn.textContent = "📋 Javoblarni ko'rish"; return; }
+    haptic();
+    box.hidden = false;
+    btn.textContent = "📋 Javoblarni yashirish";
+    if (box.dataset.loaded) return;
+    box.innerHTML = '<div class="sk" style="height:60px;border-radius:10px"></div>';
+    var uid = btn.getAttribute("data-uid");
+    api("/api/panel/report/" + kind + "/" + rid + "/answers/" + encodeURIComponent(uid)).then(function (data) {
+      box.dataset.loaded = "1";
+      box.innerHTML = data.details.map(answerRow).join("");
+    }).catch(function () {
+      box.innerHTML = '<p class="hint">Yuklab bo\'lmadi, qayta urinib ko\'ring.</p>';
+    });
+  }
+
   function openReportSheet(kind, rid, title) {
     haptic();
     $("sheetTitle").textContent = "Natijalar";
@@ -453,9 +481,12 @@
       var btn = data.can_reset
         ? '<button class="rep-reset" type="button" data-uid="' + p.telegram_id + '" data-name="' + esc(p.full_name || "O'quvchi") + '" data-score="' + esc(fmtScore(p.score)) + '">♻️ Qayta ishlashga ruxsat</button>'
         : "";
+      var toggle = kind === "aplus"
+        ? '<button class="rep-toggle" type="button" data-uid="' + p.telegram_id + '">📋 Javoblarni ko\'rish</button><div class="rep-answers" hidden></div>'
+        : "";
       return '<div class="rep-person" data-uid="' + p.telegram_id + '">' +
         '<div class="rep-person-top"><span class="rep-person-name">' + esc(p.full_name || "Ismsiz") + badge + '</span>' + score + '</div>' +
-        '<div class="rep-person-sub">' + esc(fmtShort(p.submitted_at)) + '</div>' + btn + '</div>';
+        '<div class="rep-person-sub">' + esc(fmtShort(p.submitted_at)) + '</div>' + toggle + btn + '</div>';
     }).join("");
     sheetBody.innerHTML =
       '<div class="rep-sheet-head"><h3>' + esc(title) + '</h3>' +
@@ -463,6 +494,9 @@
       (rows || '<div class="state"><div class="state-icon">📭</div><h3>Hali hech kim</h3></div>') +
       (data.can_reset ? '<p class="hint" style="margin-top:14px">♻️ tugmasi o\'quvchining shu test natijasini bazadan o\'chiradi: ball ham ayriladi va u testni qayta ishlay oladi.</p>' : "");
 
+    sheetBody.querySelectorAll(".rep-toggle").forEach(function (b) {
+      b.addEventListener("click", function () { toggleAnswers(kind, rid, b); });
+    });
     sheetBody.querySelectorAll(".rep-reset").forEach(function (b) {
       b.addEventListener("click", function () {
         var name = b.getAttribute("data-name"), uid = b.getAttribute("data-uid"), sc = b.getAttribute("data-score");
