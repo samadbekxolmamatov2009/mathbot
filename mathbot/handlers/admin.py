@@ -28,6 +28,7 @@ router.callback_query.filter(F.message.chat.type == "private")
 
 
 ADMIN_COMMANDS = [
+    BotCommand(command="panel", description="🖥 Admin panelni ochish"),
     BotCommand(command="delete", description="🗑 Foydalanuvchini o'chirish"),
     BotCommand(command="admins", description="👮 Adminlar ro'yxati"),
     BotCommand(command="help", description="ℹ️ Yordam"),
@@ -491,6 +492,7 @@ async def cancel_broadcast(callback: CallbackQuery, state: FSMContext):
 
 # ---------- Admin / Boss: Admin panel (Mini App) ----------
 
+@router.message(Command("panel"), F.chat.type == "private")
 @router.message(F.text == "🖥 Admin panel")
 async def open_admin_panel_app(message: Message):
     if not can_use_panel(message.from_user.id):
