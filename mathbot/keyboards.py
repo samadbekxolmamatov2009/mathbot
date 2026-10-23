@@ -139,6 +139,7 @@ def admin_menu_keyboard(user_id=None, force_panel=False):
             ],
         ],
         resize_keyboard=True,
+        is_persistent=True,
     )
 
 
@@ -177,6 +178,7 @@ def boss_menu_keyboard():
             ],
         ],
         resize_keyboard=True,
+        is_persistent=True,
     )
 
 
@@ -212,4 +214,5 @@ def main_menu_keyboard():
             ],
         ],
         resize_keyboard=True,
+        is_persistent=True,
     )
