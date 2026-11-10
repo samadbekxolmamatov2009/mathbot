@@ -701,13 +701,16 @@ async def boss_show_joke(message: Message):
     nxt = await next_joke_time(now, sent_today)
     when = f"{nxt.strftime('%d.%m.%Y')} ({WEEKDAYS[nxt.weekday()]}) soat {nxt.strftime('%H:%M')}" if nxt else "-"
     sticker = await db.get_setting("joke_sticker_id")
+    paused = await db.get_setting("jokes_paused") == "1"
     await message.answer(
         f"😄 <b>Navbatdagi hazil: {index + 1}-chi (jami {len(jokes)} ta)</b>\n"
         f"📅 Yuboriladi: {when}\n"
-        f"🎨 Stiker: {'bor' if sticker else 'yo‘q (botga stiker yuboring)'}\n\n"
+        f"🎨 Stiker: {'bor' if sticker else 'yo‘q (botga stiker yuboring)'}\n"
+        f"{'🚫 Hozir hazil yuborish TO‘XTATILGAN (/hazil_continue bilan yoqiladi)' if paused else ''}\n\n"
         f"{jokes[index]}\n\n"
         "Hozir guruhga yuborish: /hazil_yubor\nKeyingi hazilni almashtirish: /hazil_change\n"
-        "Yangi hazil qo'shish: /hazil_add (matn)",
+        "Yangi hazil qo'shish: /hazil_add (matn)\n"
+        "To'xtatish: /hazil_stop | Yoqish: /hazil_continue",
         parse_mode="HTML",
     )
     if sticker:
@@ -847,9 +850,31 @@ async def boss_change_joke_pick(callback: CallbackQuery):
     await _set_next_joke(callback.message, index)
 
 
+@router.message(Command("hazil_stop"), F.chat.type == "private")
+async def boss_stop_jokes(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    await db.set_setting("jokes_paused", "1")
+    await message.answer(
+        "🚫 Hazil yuborish to'xtatildi. Avtomatik jadval ham, /hazil_yubor ham ishlamaydi.\n"
+        "Qayta yoqish: /hazil_continue"
+    )
+
+
+@router.message(Command("hazil_continue"), F.chat.type == "private")
+async def boss_continue_jokes(message: Message):
+    if not is_boss(message.from_user.id):
+        return
+    await db.set_setting("jokes_paused", "0")
+    await message.answer("✅ Hazil yuborish qayta yoqildi. Jadval va /hazil_yubor odatdagidek ishlaydi.")
+
+
 @router.message(Command("hazil_yubor"), F.chat.type == "private")
 async def boss_send_joke_now(message: Message):
     if not is_boss(message.from_user.id):
+        return
+    if await db.get_setting("jokes_paused") == "1":
+        await message.answer("🚫 Hazil yuborish hozir to'xtatilgan. Yoqish: /hazil_continue")
         return
     jokes = await get_all_jokes()
     index = int(await db.get_setting("joke_index", "0") or 0) % len(jokes)
