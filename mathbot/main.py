@@ -233,7 +233,8 @@ async def send_broadcast_schedule_loop(bot: Bot):
             today = now.strftime("%Y-%m-%d")
             skip_dates, extra_dates = await get_joke_overrides()
             if (
-                is_joke_date(now, skip_dates, extra_dates)
+                await db.get_setting("jokes_paused") != "1"
+                and is_joke_date(now, skip_dates, extra_dates)
                 and start <= now < start + timedelta(minutes=10)
                 and await db.get_setting("joke_last_sent_date") != today
             ):
