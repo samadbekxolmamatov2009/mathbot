@@ -153,6 +153,22 @@ async def cmd_stats(message: Message):
         text += f"{course_name}: {row['cnt']}\n"
         total += row["cnt"]
     text += f"\nJami: {total}"
+
+    role_rows = await db.count_users_by_role()
+    role_counts = {"student": 0, "teacher": 0}
+    for r in role_rows:
+        if r["role"] in role_counts:
+            role_counts[r["role"]] = r["cnt"]
+    role_total = sum(role_counts.values())
+    if role_total:
+        student_pct = role_counts["student"] / role_total * 100
+        teacher_pct = role_counts["teacher"] / role_total * 100
+        text += (
+            "\n\n🎓 O'quvchi/o'qituvchi nisbati:\n"
+            f"O'quvchi: {role_counts['student']} ({student_pct:.0f}%)\n"
+            f"O'qituvchi: {role_counts['teacher']} ({teacher_pct:.0f}%)"
+        )
+
     await message.answer(text)
 
 
