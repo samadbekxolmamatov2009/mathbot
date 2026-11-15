@@ -443,6 +443,16 @@ async def count_users_by_course():
             return await cursor.fetchall()
 
 
+async def count_users_by_role():
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            """SELECT role, COUNT(*) as cnt FROM users
+               WHERE is_registered = 1 GROUP BY role"""
+        ) as cursor:
+            return await cursor.fetchall()
+
+
 async def delete_user(telegram_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
         cursor = await db.execute(
